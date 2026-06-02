@@ -203,18 +203,20 @@ function collectState() {
   document.querySelectorAll('input.where-input, input.score-input').forEach(el => {
     if (el.id) state[el.id] = el.value;
   });
+
   const sessionRows = [];
   document.querySelectorAll('#session-body tr').forEach(tr => {
     sessionRows.push(Array.from(tr.querySelectorAll('input')).map(i => i.value));
   });
   state._sessionRows = sessionRows;
+
   const missedRows = [];
   document.querySelectorAll('#missed-body tr').forEach(tr => {
     missedRows.push(Array.from(tr.querySelectorAll('input')).map(i => i.value));
   });
   state._missedRows = missedRows;
 
-  // Notes sections
+  // Active notes
   const notesSections = [];
   document.querySelectorAll('#notes-sections > div[id^="note-"]').forEach(div => {
     notesSections.push({
@@ -223,6 +225,16 @@ function collectState() {
     });
   });
   state._notesSections = notesSections;
+
+  // Archived notes
+  const archivedSections = [];
+  document.querySelectorAll('#archive-sections > div[id^="note-"]').forEach(div => {
+    archivedSections.push({
+      name: div.querySelector('.note-title').textContent,
+      content: div.querySelector('textarea').value
+    });
+  });
+  state._archivedSections = archivedSections;
 
   return state;
 }
@@ -244,20 +256,28 @@ function applyState(state) {
     const el = document.getElementById(id);
     if (el && state[id]) { el.checked = true; toggleExam(id); }
   });
+
   document.getElementById('session-body').innerHTML = '';
   const sRows = state._sessionRows || [];
   if (sRows.length > 0) sRows.forEach(r => addSessionRow(r));
   else for (let i = 0; i < 5; i++) addSessionRow();
+
   document.getElementById('missed-body').innerHTML = '';
   const mRows = state._missedRows || [];
   if (mRows.length > 0) mRows.forEach(r => addMissedRow(r));
   else for (let i = 0; i < 5; i++) addMissedRow();
 
-  // Restore notes
+  // Restore active notes
   document.getElementById('notes-sections').innerHTML = '';
   const notes = state._notesSections || [];
   if (notes.length > 0) notes.forEach(n => addNotesSection(n.name, n.content));
   else addNotesSection('General Notes', '');
+
+  // Restore archived notes
+  document.getElementById('archive-sections').innerHTML = '';
+  const archived = state._archivedSections || [];
+  archived.forEach(n => addArchivedSection(n.name, n.content));
+  updateArchiveEmptyState();
 
   updateProgress();
 }
@@ -292,18 +312,77 @@ function addNotesSection(name, content) {
   ta.placeholder = 'Type your notes here...';
   ta.value = content || '';
   ta.oninput = () => schedSave();
-  ta.style.cssText = 'width:100%;min-height:140px;font-family:\'DM Sans\',sans-serif;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:12px;box-sizing:border-box;outline:none;resize:vertical;line-height:1.7;color:var(--text);background:#fff;display:block';
+  ta.style.cssText = "width:100%;min-height:140px;font-family:'DM Sans',sans-serif;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:12px;box-sizing:border-box;outline:none;resize:vertical;line-height:1.7;color:var(--text);background:#fff;display:block";
 
   const header = document.createElement('div');
   header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px';
   header.innerHTML = `
     <span class="note-title" style="font-size:14px;font-weight:500;color:var(--text)">${sectionName}</span>
-    <button onclick="document.getElementById('${id}').remove();schedSave()" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background='none'">Remove</button>
+    <button onclick="archiveNote('${id}')" style="font-size:11px;color:var(--muted);background:none;border:1px solid var(--border);cursor:pointer;padding:3px 9px;border-radius:4px;font-family:'DM Sans',sans-serif" onmouseover="this.style.background='var(--gold-light)';this.style.borderColor='var(--gold)';this.style.color='#7B5E1A'" onmouseout="this.style.background='none';this.style.borderColor='var(--border)';this.style.color='var(--muted)'">Archive</button>
   `;
 
   div.appendChild(header);
   div.appendChild(ta);
   document.getElementById('notes-sections').appendChild(div);
+}
+
+function archiveNote(id) {
+  const div = document.getElementById(id);
+  if (!div) return;
+  const name = div.querySelector('.note-title').textContent;
+  const content = div.querySelector('textarea').value;
+  div.remove();
+  addArchivedSection(name, content);
+  updateArchiveEmptyState();
+  schedSave();
+}
+
+// ============================================================
+// ARCHIVES
+// ============================================================
+function addArchivedSection(name, content) {
+  const emptyEl = document.getElementById('archive-empty');
+  if (emptyEl) emptyEl.style.display = 'none';
+
+  const id = 'note-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  const div = document.createElement('div');
+  div.id = id;
+  div.style.cssText = 'margin-bottom:20px';
+
+  const ta = document.createElement('textarea');
+  ta.placeholder = 'No content.';
+  ta.value = content || '';
+  ta.oninput = () => schedSave();
+  ta.style.cssText = "width:100%;min-height:140px;font-family:'DM Sans',sans-serif;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:12px;box-sizing:border-box;outline:none;resize:vertical;line-height:1.7;color:var(--text);background:var(--gray-light);display:block";
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px';
+  header.innerHTML = `
+    <span class="note-title" style="font-size:14px;font-weight:500;color:var(--muted)">${name}</span>
+    <button onclick="unarchiveNote('${id}')" style="font-size:11px;color:var(--blue);background:none;border:1px solid var(--border);cursor:pointer;padding:3px 9px;border-radius:4px;font-family:'DM Sans',sans-serif" onmouseover="this.style.background='var(--blue-light)';this.style.borderColor='var(--blue-mid)'" onmouseout="this.style.background='none';this.style.borderColor='var(--border)'">Unarchive</button>
+  `;
+
+  div.appendChild(header);
+  div.appendChild(ta);
+  document.getElementById('archive-sections').appendChild(div);
+}
+
+function unarchiveNote(id) {
+  const div = document.getElementById(id);
+  if (!div) return;
+  const name = div.querySelector('.note-title').textContent;
+  const content = div.querySelector('textarea').value;
+  div.remove();
+  addNotesSection(name, content);
+  updateArchiveEmptyState();
+  schedSave();
+}
+
+function updateArchiveEmptyState() {
+  const emptyEl = document.getElementById('archive-empty');
+  if (!emptyEl) return;
+  const hasItems = document.querySelectorAll('#archive-sections > div[id^="note-"]').length > 0;
+  emptyEl.style.display = hasItems ? 'none' : 'block';
 }
 
 // ============================================================
