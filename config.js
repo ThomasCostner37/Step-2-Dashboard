@@ -6,7 +6,7 @@
 const CONFIG = {
   // From Google Cloud Console (OAuth 2.0 Client ID)
   // Looks like: 123456789-abc123.apps.googleusercontent.com
-  GOOGLE_CLIENT_ID: 'YOUR_CLIENT_ID_HERE',
+  GOOGLE_CLIENT_ID: '655217120371-j3vqj5umegsiqrqi7876g1lh2rpct77v.apps.googleusercontent.com',
 
   // The ID of your "Step 2 Master Checklist" Google Doc
   // It's the long string in the URL:
