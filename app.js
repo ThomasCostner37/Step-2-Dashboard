@@ -19,7 +19,6 @@ window.onload = () => {
   for (let i = 0; i < 5; i++) addMissedRow();
   updateCountdown();
 
-  // Check if already signed in via localStorage token
   const saved = localStorage.getItem('step2_access_token');
   if (saved) {
     accessToken = saved;
@@ -66,7 +65,6 @@ async function loadFromDrive() {
     if (res.status === 401) { signOut(); return; }
     const doc = await res.json();
 
-    // Extract JSON state block from the doc body
     const text = extractDocText(doc);
     const match = text.match(/DASHBOARD_STATE_JSON_START([\s\S]*?)DASHBOARD_STATE_JSON_END/);
     if (match) {
@@ -82,7 +80,6 @@ async function loadFromDrive() {
   } catch(e) {
     console.error('Load error', e);
     setSyncBadge('err', 'Load failed');
-    // Fall back to localStorage
     const local = localStorage.getItem('step2checklist');
     if (local) applyState(JSON.parse(local));
   }
@@ -94,15 +91,12 @@ async function loadFromDrive() {
 async function saveToDrive() {
   const state = collectState();
   const stateStr = JSON.stringify(state);
-  if (stateStr === lastSavedState) return; // nothing changed
+  if (stateStr === lastSavedState) return;
 
   setSyncBadge('saving', 'Saving…');
-
-  // Also save to localStorage as backup
   localStorage.setItem('step2checklist', stateStr);
 
   try {
-    // First get doc to find existing JSON block location
     const res = await fetch(
       `https://docs.googleapis.com/v1/documents/${CONFIG.DOC_ID}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -117,7 +111,6 @@ async function saveToDrive() {
     let requests;
 
     if (text.includes(marker)) {
-      // Replace existing block
       const startIdx = findTextIndex(doc, marker);
       const endIdx = findTextIndex(doc, endMarker) + endMarker.length;
       const newBlock = `${marker}\n${stateStr}\n${endMarker}`;
@@ -127,7 +120,6 @@ async function saveToDrive() {
         insertText: { location: { index: startIdx }, text: newBlock }
       }];
     } else {
-      // Append to end of doc
       const endIdx = getDocEndIndex(doc);
       const newBlock = `\n\nDASHBOARD_STATE_JSON_START\n${stateStr}\n${endMarker}`;
       requests = [{
@@ -221,6 +213,17 @@ function collectState() {
     missedRows.push(Array.from(tr.querySelectorAll('input')).map(i => i.value));
   });
   state._missedRows = missedRows;
+
+  // Notes sections
+  const notesSections = [];
+  document.querySelectorAll('#notes-sections > div[id^="note-"]').forEach(div => {
+    notesSections.push({
+      name: div.querySelector('.note-title').textContent,
+      content: div.querySelector('textarea').value
+    });
+  });
+  state._notesSections = notesSections;
+
   return state;
 }
 
@@ -231,10 +234,7 @@ function applyState(state) {
     if (!el) return;
     if (el.type === 'checkbox') {
       el.checked = state[k];
-      if (k.startsWith('vis-')) {
-        const id = k.replace('vis-', '');
-        markDone(id);
-      }
+      if (k.startsWith('vis-')) markDone(k.replace('vis-', ''));
     } else {
       el.value = state[k] || '';
     }
@@ -252,10 +252,16 @@ function applyState(state) {
   const mRows = state._missedRows || [];
   if (mRows.length > 0) mRows.forEach(r => addMissedRow(r));
   else for (let i = 0; i < 5; i++) addMissedRow();
+
+  // Restore notes
+  document.getElementById('notes-sections').innerHTML = '';
+  const notes = state._notesSections || [];
+  if (notes.length > 0) notes.forEach(n => addNotesSection(n.name, n.content));
+  else addNotesSection('General Notes', '');
+
   updateProgress();
 }
 
-// Debounced save — waits 1.5s after last change
 function schedSave() {
   clearTimeout(saveTimer);
   setSyncBadge('saving', 'Unsaved…');
@@ -267,6 +273,28 @@ function signOut() {
   accessToken = null;
   document.getElementById('app').style.display = 'none';
   document.getElementById('auth-screen').style.display = 'flex';
+}
+
+// ============================================================
+// NOTES
+// ============================================================
+function addNotesSection(name, content) {
+  const inputEl = document.getElementById('new-section-name');
+  const sectionName = name || (inputEl ? inputEl.value.trim() : '') || 'Notes';
+  if (inputEl) inputEl.value = '';
+
+  const id = 'note-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  const div = document.createElement('div');
+  div.id = id;
+  div.style.cssText = 'margin-bottom:20px';
+  div.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span class="note-title" style="font-size:14px;font-weight:500;color:var(--text)">${sectionName}</span>
+      <button onclick="document.getElementById('${id}').remove();schedSave()" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background='none'">Remove</button>
+    </div>
+    <textarea oninput="schedSave()" placeholder="Type your notes here..." style="width:100%;min-height:140px;font-family:'DM Sans',sans-serif;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:12px;outline:none;resize:vertical;line-height:1.7;color:var(--text);background:#fff">${content || ''}</textarea>
+  `;
+  document.getElementById('notes-sections').appendChild(div);
 }
 
 // ============================================================
