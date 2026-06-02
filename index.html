@@ -42,6 +42,9 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
 .tab{font-size:13px;font-weight:400;color:rgba(255,255,255,0.45);padding:12px 16px;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;font-family:'DM Mono',monospace;user-select:none}
 .tab:hover{color:rgba(255,255,255,0.7)}
 .tab.active{color:#fff;border-bottom-color:var(--gold);font-weight:500}
+.tab.archive-tab{color:rgba(201,168,76,0.5)}
+.tab.archive-tab:hover{color:rgba(201,168,76,0.8)}
+.tab.archive-tab.active{color:var(--gold);border-bottom-color:var(--gold)}
 .main{padding:1.5rem 2.5rem 4rem;max-width:900px;margin:0 auto}
 .section-block{margin-bottom:2rem}
 .section-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;padding:4px 10px;border-radius:4px;margin-bottom:12px}
@@ -49,6 +52,7 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
 .tag-targeted{background:var(--gold-light);color:#7B5E1A}
 .tag-skip{background:#F7F8FA;color:var(--gray)}
 .tag-phase{background:var(--navy);color:rgba(255,255,255,0.8)}
+.tag-archive{background:var(--gold-light);color:#7B5E1A}
 .topic-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:10px;transition:box-shadow .15s}
 .topic-card:hover{box-shadow:0 2px 12px rgba(0,0,0,0.06)}
 .topic-card.done{opacity:0.6;border-left:3px solid var(--green)}
@@ -100,6 +104,8 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
 .progress-label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px;font-family:'DM Mono',monospace}
 .progress-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--gold));border-radius:3px;transition:width .4s}
+.archive-empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px;font-family:'DM Mono',monospace}
+.archive-empty-icon{font-size:28px;margin-bottom:10px;opacity:0.4}
 </style>
 </head>
 <body>
@@ -147,6 +153,7 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
   <div class="tab" onclick="showTab('sessions',this)">Session Log</div>
   <div class="tab" onclick="showTab('missed',this)">Missed Concepts</div>
   <div class="tab" onclick="showTab('notes',this)">Notes</div>
+  <div class="tab archive-tab" onclick="showTab('archives',this)">Archives</div>
   <div class="tab" onclick="showTab('resources',this)">Resources</div>
 </div>
 
@@ -388,6 +395,22 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
       <button class="add-row-btn" style="margin-top:0;white-space:nowrap" onclick="addNotesSection()">+ Add section</button>
     </div>
     <div id="notes-sections"></div>
+  </div>
+</div>
+
+<!-- ARCHIVES -->
+<div id="tab-archives" class="tab-content">
+  <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px">
+      <div class="section-tag tag-archive" style="margin-bottom:0">◎ Archived Notes</div>
+      <span style="font-size:12px;color:var(--muted);font-family:'DM Mono',monospace">— edit freely, unarchive to move back to Notes</span>
+    </div>
+    <div id="archive-sections"></div>
+    <div id="archive-empty" class="archive-empty">
+      <div class="archive-empty-icon">◎</div>
+      <div>No archived notes yet.</div>
+      <div style="font-size:11px;margin-top:4px;opacity:0.7">Hit "Archive" on any note to store it here.</div>
+    </div>
   </div>
 </div>
 
