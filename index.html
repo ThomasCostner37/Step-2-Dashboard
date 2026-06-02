@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Step 2 Master Checklist — Thomas Costner</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#0B1628;--navy2:#142038;--navy3:#1E2F4A;
+  --blue:#2B6CB0;--blue-light:#EBF4FF;--blue-mid:#90CDF4;
+  --gold:#C9A84C;--gold-light:#FFF8E7;
+  --green:#276749;--green-light:#F0FFF4;
+  --red:#9B2335;--border:#E2E8F0;
+  --gray:#6B7280;--gray-light:#F7F8FA;
+  --text:#1A202C;--muted:#718096;
+}
+body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-height:100vh}
+/* AUTH SCREEN */
+.auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--navy)}
+.auth-box{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:2.5rem;text-align:center;max-width:400px;width:90%}
+.auth-title{font-family:'DM Serif Display',serif;font-size:26px;color:#fff;margin-bottom:8px}
+.auth-sub{font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:2rem;font-family:'DM Mono',monospace}
+.google-btn{display:flex;align-items:center;gap:10px;background:#fff;color:#1A202C;border:none;border-radius:8px;padding:12px 20px;font-size:14px;font-weight:500;cursor:pointer;width:100%;justify-content:center;font-family:'DM Sans',sans-serif;transition:opacity .15s}
+.google-btn:hover{opacity:0.9}
+.google-btn svg{flex-shrink:0}
+.sync-status{font-size:11px;font-family:'DM Mono',monospace;padding:3px 10px;border-radius:99px;display:inline-flex;align-items:center;gap:5px}
+.sync-ok{background:rgba(39,103,73,0.2);color:#9AE6B4}
+.sync-saving{background:rgba(201,168,76,0.2);color:var(--gold)}
+.sync-err{background:rgba(155,35,53,0.2);color:#FC8181}
+/* HEADER */
+.header{background:var(--navy);padding:2rem 2.5rem 1.5rem;position:relative;overflow:hidden}
+.header::before{content:'';position:absolute;top:-60px;right:-60px;width:280px;height:280px;border-radius:50%;background:rgba(43,108,176,0.15);pointer-events:none}
+.header::after{content:'';position:absolute;bottom:-80px;left:30%;width:200px;height:200px;border-radius:50%;background:rgba(201,168,76,0.08);pointer-events:none}
+.header-top{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem}
+.header-name{font-family:'DM Serif Display',serif;font-size:28px;color:#fff;letter-spacing:-0.3px}
+.header-sub{font-size:13px;color:var(--blue-mid);font-weight:300;margin-top:3px;font-family:'DM Mono',monospace}
+.header-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.countdown-grid{display:flex;gap:12px}
+.countdown-box{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:10px 16px;text-align:center;min-width:80px}
+.countdown-num{font-family:'DM Mono',monospace;font-size:24px;font-weight:500;color:var(--gold);line-height:1}
+.countdown-label{font-size:10px;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+.how-to{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 16px;margin-top:1.25rem;display:flex;flex-wrap:wrap;gap:12px 24px}
+.how-to-item{font-size:12px;color:rgba(255,255,255,0.55);font-family:'DM Mono',monospace}
+.how-to-item strong{color:rgba(255,255,255,0.85);font-weight:500}
+/* TABS */
+.tabs{background:var(--navy2);display:flex;border-bottom:1px solid rgba(255,255,255,0.08);padding:0 2.5rem;overflow-x:auto}
+.tab{font-size:13px;font-weight:400;color:rgba(255,255,255,0.45);padding:12px 16px;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;font-family:'DM Mono',monospace;user-select:none}
+.tab:hover{color:rgba(255,255,255,0.7)}
+.tab.active{color:#fff;border-bottom-color:var(--gold);font-weight:500}
+/* MAIN */
+.main{padding:1.5rem 2.5rem 4rem;max-width:900px;margin:0 auto}
+.section-block{margin-bottom:2rem}
+.section-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;padding:4px 10px;border-radius:4px;margin-bottom:12px}
+.tag-full{background:#EBF4FF;color:var(--blue)}
+.tag-targeted{background:var(--gold-light);color:#7B5E1A}
+.tag-skip{background:#F7F8FA;color:var(--gray)}
+.tag-phase{background:var(--navy);color:rgba(255,255,255,0.8)}
+.topic-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:10px;transition:box-shadow .15s}
+.topic-card:hover{box-shadow:0 2px 12px rgba(0,0,0,0.06)}
+.topic-card.done{opacity:0.6;border-left:3px solid var(--green)}
+.topic-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.topic-name{font-size:15px;font-weight:500;color:var(--text)}
+.topic-controls{display:flex;align-items:center;gap:12px;flex-shrink:0;flex-wrap:wrap}
+.check-group{display:flex;align-items:center;gap:5px}
+.check-group label{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;cursor:pointer}
+.check-group input[type=checkbox]{width:15px;height:15px;accent-color:var(--green);cursor:pointer}
+.where-input{font-size:11px;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:4px;padding:3px 8px;color:var(--text);background:var(--gray-light);width:110px;outline:none}
+.where-input:focus{border-color:var(--blue-mid);background:#fff}
+.topic-subtopics{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.pill{font-size:11px;padding:2px 9px;border-radius:99px;background:var(--blue-light);color:var(--blue)}
+.pill.warn{background:#FFF5F5;color:var(--red)}
+.pill.skip-pill{background:#F7F8FA;color:var(--gray)}
+.topic-note{font-size:12px;color:var(--muted);line-height:1.6;border-top:1px solid var(--border);padding-top:8px;margin-top:4px}
+.topic-note strong{color:var(--text);font-weight:500}
+.skip-list{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 20px}
+.skip-item{display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)}
+.skip-item:last-child{border-bottom:none}
+.skip-item-name{font-size:13px;font-weight:500;min-width:180px}
+.skip-item-reason{font-size:12px;color:var(--muted)}
+.skip-badge{font-size:10px;padding:2px 7px;border-radius:4px;background:var(--green-light);color:var(--green);font-weight:500;white-space:nowrap;flex-shrink:0}
+.exam-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:16px}
+.exam-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;transition:all .15s}
+.exam-card:hover{border-color:var(--blue-mid)}
+.exam-card.done{background:var(--green-light);border-color:#9AE6B4}
+.exam-card input[type=checkbox]{width:14px;height:14px;accent-color:var(--green);cursor:pointer;flex-shrink:0}
+.exam-card label{font-size:13px;cursor:pointer;font-family:'DM Mono',monospace}
+.score-input{font-family:'DM Mono',monospace;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;width:100%;outline:none;background:var(--gray-light)}
+.score-input:focus{border-color:var(--blue-mid);background:#fff}
+.log-table{width:100%;border-collapse:collapse;font-size:13px}
+.log-table th{text-align:left;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 10px;border-bottom:2px solid var(--border);font-family:'DM Mono',monospace}
+.log-table td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+.log-table tr:last-child td{border-bottom:none}
+.log-input{border:1px solid transparent;background:transparent;width:100%;font-size:13px;color:var(--text);font-family:'DM Sans',sans-serif;outline:none;padding:3px 5px;border-radius:4px}
+.log-input:focus{border-color:var(--blue-mid);background:#fff}
+.log-input::placeholder{color:#CBD5E0}
+.add-row-btn{margin-top:10px;font-size:12px;color:var(--blue);cursor:pointer;background:none;border:1px solid var(--border);border-radius:6px;font-family:'DM Sans',sans-serif;padding:5px 12px;transition:all .15s}
+.add-row-btn:hover{background:var(--blue-light);border-color:var(--blue-mid)}
+.resource-group{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:10px}
+.resource-title{font-size:13px;font-weight:500;color:var(--text);margin-bottom:10px}
+.resource-item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+.resource-item:last-child{border-bottom:none}
+.resource-item input{accent-color:var(--green);width:14px;height:14px;cursor:pointer;flex-shrink:0}
+.resource-item label{font-size:13px;cursor:pointer}
+.tab-content{display:none}.tab-content.active{display:block}
+.progress-wrap{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:1.5rem}
+.progress-label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px;font-family:'DM Mono',monospace}
+.progress-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--gold));border-radius:3px;transition:width .4s}
+</style>
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen" class="auth-screen" style="display:none">
+  <div class="auth-box">
+    <div class="auth-title">Step 2 Dashboard</div>
+    <div class="auth-sub">Thomas Costner · Sign in to sync with Google Drive</div>
+    <button class="google-btn" onclick="signIn()">
+      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z"/></svg>
+      Sign in with Google
+    </button>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" style="display:none">
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <div class="header-name">Step 2 Master Checklist</div>
+      <div class="header-sub">Thomas Costner &nbsp;·&nbsp; CSSE: June 12, 2026 &nbsp;·&nbsp; Step 2 CK: August 12, 2026</div>
+    </div>
+    <div class="header-right">
+      <div class="countdown-grid">
+        <div class="countdown-box">
+          <div class="countdown-num" id="css-days">—</div>
+          <div class="countdown-label">to CSSE</div>
+        </div>
+        <div class="countdown-box">
+          <div class="countdown-num" id="step-days">—</div>
+          <div class="countdown-label">to Step 2</div>
+        </div>
+      </div>
+      <span id="sync-badge" class="sync-status sync-ok">● Synced</span>
+    </div>
+  </div>
+  <div class="how-to">
+    <div class="how-to-item"><strong>Visited</strong> = done a question block</div>
+    <div class="how-to-item"><strong>Where</strong> = UWorld / AMBOSS / Both</div>
+    <div class="how-to-item"><strong>Revisit</strong> = leave blank if solid</div>
+    <div class="how-to-item"><strong>Syncs automatically</strong> to your Google Drive Doc</div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('phase1',this)">Phase 1 — Pre-CSSE</div>
+  <div class="tab" onclick="showTab('phase2',this)">Phase 2 — Post-CSSE</div>
+  <div class="tab" onclick="showTab('sessions',this)">Session Log</div>
+  <div class="tab" onclick="showTab('missed',this)">Missed Concepts</div>
+  <div class="tab" onclick="showTab('resources',this)">Resources</div>
+</div>
+
+<div class="main">
+
+<!-- PHASE 1 -->
+<div id="tab-phase1" class="tab-content active">
+  <div class="progress-wrap">
+    <div class="progress-label"><span>Phase 1 Progress</span><span id="prog-text">0 / 12 topics visited</span></div>
+    <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+  </div>
+
+  <div class="section-block">
+    <div class="section-tag tag-full">● Full broad blocks — hit the whole topic</div>
+
+    <div class="topic-card" id="card-ob">
+      <div class="topic-header"><span class="topic-name">Obstetrics</span>
+        <div class="topic-controls">
+          <input class="where-input" placeholder="UW / AMBOSS" id="where-ob" oninput="schedSave()">
+          <div class="check-group"><input type="checkbox" id="vis-ob" onchange="updateProgress();markDone('ob');schedSave()"><label for="vis-ob">Visited</label></div>
+          <div class="check-group"><input type="checkbox" id="rev-ob" onchange="schedSave()"><label for="rev-ob">Revisit</label></div>
+        </div>
+      </div>
+      <div class="topic-subtopics"><span class="pill warn">obstetric complications</span><span class="pill warn">labor & delivery</span><span class="pill">systemic Dx in pregnancy</span><span class="pill">puerperium</span><span class="pill">disorders of newborn</span><span class="pill">prenatal screening</span></div>
+      <div class="topic-note">Error rate <strong>worsened</strong> over year (6% Peds → 21% OB). Slow-corrects overlap misses on obstetric complications and L&D — whole system needs reinforcing.</div>
+    </div>
+
+    <div class="topic-card" id="card-frepro">
+      <div class="topic-header"><span class="topic-name">Female Reproductive</span>
+        <div class="topic-controls">
+          <input class="where-input" placeholder="UW / AMBOSS" id="where-frepro" oninput="schedSave()">
+          <div class="check-group"><input type="checkbox" id="vis-frepro" onchange="updateProgress();markDone('frepro');schedSave()"><label for="vis-frepro">Visited</label></div>
+          <div class="check-group"><input type="checkbox" id="rev-frepro" onchange="schedSave()"><label for="rev-frepro">Revisit</label></div>
+        </div>
+      </div>
+      <div class="topic-subtopics"><span class="pill warn">menstrual & endocrine disorders</span><span class="pill warn">infectious/inflammatory (STI/PID)</span><span class="pill">malignant neoplasms</span><span class="pill">fertility & infertility</span><span class="pill">menopause</span><span class="pill">breast disorders</span></div>
+      <div class="topic-note"><strong>Only system missed in all 6 rotations.</strong> 9 different subtopics affected. Slow-corrects overlap misses on menstrual, infectious, and fertility.</div>
+    </div>
+
+    <div class="topic-card" id="card-resp">
+      <div class="topic-header"><span class="topic-name">Respiratory</span>
+        <div class="topic-controls">
+          <input class="where-input" placeholder="UW / AMBOSS" id="where-resp" oninput="schedSave()">
+          <div class="check-group"><input type="checkbox" id="vis-resp" onchange="updateProgress();markDone('resp');schedSave()"><label for="vis-resp">Visited</label></div>
+          <div class="check-group"><input type="checkbox" id="rev-resp" onchange="schedSave()"><label for="rev-resp">Revisit</label></div>
+        </div>
+      </div>
+      <div class="topic-subtopics"><span class="pill warn">lower airway infections (CAP/HAP/atypicals)</span><span class="pill warn">obstructive airway (COPD/asthma stepwise)</span><span class="pill">pleural disorders</span><span class="pill">pulmonary vascular (PE/HTN)</span><span class="pill skip-pill">skip: lung malignancy</span></div>
+      <div class="topic-note">Error rate slightly worse over year. Slow-corrects overlap misses on both infectious AND obstructive — two separate subtopics with the same signal.</div>
+    </div>
+
+    <div class="topic-card" id="card-cardio">
+      <div class="topic-header"><span class="topic-name">Cardiology</span>
+        <div class="topic-controls">
+          <input class="where-input" placeholder="UW / AMBOSS" id="where-cardio" oninput="schedSave()">
+          <div class="check-group"><input type="checkbox" id="vis-cardio" onchange="updateProgress();markDone('cardio');schedSave()"><label for="vis-cardio">Visited</label></div>
+          <div class="check-group"><input type="checkbox" id="rev-cardio" onchange="schedSave()"><label for="rev-cardio">Revisit</label></div>
+        </div>
+      </div>
+      <div class="topic-subtopics"><span class="pill warn">congenital heart disease</span><span class="pill warn">infectious (endocarditis/myocarditis/pericarditis)</span><span class="pill warn">dysrhythmias</span><span class="pill">peripheral vascular disease</span><span class="pill">valvular disease</span><span class="pill skip-pill">skip: HF / HTN / ischemia</span></div>
+      <div class="topic-note">21% error rate across 4 rotations. <strong>IM2 shelf Cardio 67%</strong> — only below-avg shelf sub-score all year. Slow-corrects on valvular + congenital overlap with misses.</div>
+    </div>
+
+    <div class="topic-card" id="card-endo">
+      <div class="topic-header"><span class="topic-name">Endocrine</span>
+        <div class="topic-controls">
+          <input class="where-input" placeholder="UW / AMBOSS" id="where-endo" oninput="schedSave()">
+          <div class="check-group"><input type="checkbox" id="vis-endo" onchange="updateProgress();markDone('endo');schedSave()"><label for="vis-endo">Visited</label></div>
+          <div class="check-group"><input type="checkbox" id="rev-endo" onchange="schedSave()"><label for="rev-endo">Revisit</label></div>
+        </div>
+      </div>
+      <div class="topic-subtopics"><span class="pill warn">thyroid (full spectrum: workup, thyroiditis, nodules, cancer, screening)</span><span class="pill warn">diabetes (management + complications)</span><span class="pill">adrenal disorders</span><span class="pill">parathyroid / calcium</span></div>
+      <div class="topic-note">5 thyroid misses across FM/Peds/Medicine. Parathyroid has 3 slow-corrects with no misses yet — likely getting lucky. Diabetes and adrenal have slow-correct/miss overlap.</div>
+    </div>
+
+    <div class="topic-card" id="card-multi">
+      <div class="topic-header"><span class="topic-name">Multi-System (acid-base, shock, fluids)</span>
+        <div class="topic-controls">
+          <input class="where-input" placeholder="UW / AMBOSS" id="where-multi" oninput="schedSave()">
+          <div class="check-group"><input type="checkbox" id="vis-multi" onchange="updateProgress();markDone('multi');schedSave()"><label for="vis-multi">Visited</label></div>
+          <div class="check-group"><input type="checkbox" id="rev-multi" onchange="schedSave()"><label for="rev-multi">Revisit</label></div>
+        </div>
+      </div>
+      <div class="topic-subtopics"><span class="pill warn">acid-base (primary + mixed, delta-delta)</span><span class="pill warn">fluid/electrolytes (SIADH vs CSW, K+ management)</span><span class="pill warn">shock hemodynamic profiles</span><span class="pill">bacterial infections workup</span></div>
+      <div class="topic-note">Slow-correct/miss overlap on <strong>every</strong> subtopic. Goal is speed AND accuracy. SIADH vs CSW and delta-delta are the specific gaps.</div>
+    </div>
+  </div>
+
+  <div class="section-block">
+    <div class="section-tag tag-targeted">◆ Targeted — 4–6 questions on specific gap only</div>
+
+    <div class="topic-card" id="card-blood">
+      <div class="topic-header"><span class="topic-name">Blood / Hematology</span>
+        <div class="topic-controls">
+          <input class="where-input" placeholder="UW / AMBOSS" id="where-blood" oninput="schedSave()">
+          <div class="check-group"><input type="checkbox" id="vis-blood" onchange="updateProgress();markDone('blood');schedSave()"><label for="vis-blood">Visited</label></div>
+          <div class="check-group"><input type="checkbox" id="rev-blood" onchange="schedSave()"><label for="rev-blood">Revisit</label></div>
+        </div>
+      </div>
+      <div class="topic-subtopics"><span class="pill warn">anemia workup (iron vs B12 vs ACD vs hemolytic)</span><span class="pill warn">transfusion reactions</span><span class="pill">hypocoagulable disorders</span></div>
+      <div class="topic-note">21% overall but misses concentrated — anemias dominate (4/9). Don't open the full block.</div>
+    </div>
+
+    <div class="topic-card" id="card-cns">
+      <div class="topic-header"><span class="topic-name">CNS / Neurology</span>
+        <div class="topic-controls">
+          <input class="where-input" placeholder="UW / AMBOSS" id="where-cns" oninput="schedSave()">
+          <div class="check-group"><input type="checkbox" id="vis-cns" onchange="updateProgress();markDone('cns');schedSave()"><label for="vis-cns">Visited</label></div>
+          <div class="check-group"><input type="checkbox" id="rev-cns" onchange="schedSave()"><label for="rev-cns">Revisit</label></div>
+        </div>
+      </div>
+      <div class="topic-subtopics"><span class="pill warn">traumatic/mechanical (TBI, herniation, SDH/EDH)</span><span class="pill">global cerebral dysfunction (delirium/encephalopathy)</span><span class="pill">degenerative disorders (dementia types)</span></div>
+      <div class="topic-note">18% error rate but misses maximally scattered — only these 3 subtopics have meaningful signal.</div>
+    </div>
+
+    <div class="topic-card" id="card-gi">
+      <div class="topic-header"><span class="topic-name">GI / Gastroenterology</span>
+        <div class="topic-controls">
+          <input class="where-input" placeholder="UW / AMBOSS" id="where-gi" oninput="schedSave()">
+          <div class="check-group"><input type="checkbox" id="vis-gi" onchange="updateProgress();markDone('gi');schedSave()"><label for="vis-gi">Visited</label></div>
+          <div class="check-group"><input type="checkbox" id="rev-gi" onchange="schedSave()"><label for="rev-gi">Revisit</label></div>
+        </div>
+      </div>
+      <div class="topic-subtopics"><span class="pill warn">congenital GI (pyloric stenosis, Hirschsprung, intussusception, malrotation)</span><span class="pill warn">IBD (Crohn's vs UC: colonoscopy, management, extraintestinal)</span></div>
+      <div class="topic-note">Improved FM→Medicine but Peds GI hit 30%. IBD misses appeared in 3 separate rotations.</div>
+    </div>
+
+    <div class="topic-card" id="card-beh">
+      <div class="topic-header"><span class="topic-name">Behavioral / Psychiatry</span>
+        <div class="topic-controls">
+          <input class="where-input" placeholder="UW / AMBOSS" id="where-beh" oninput="schedSave()">
+          <div class="check-group"><input type="checkbox" id="vis-beh" onchange="updateProgress();markDone('beh');schedSave()"><label for="vis-beh">Visited</label></div>
+          <div class="check-group"><input type="checkbox" id="rev-beh" onchange="schedSave()"><label for="rev-beh">Revisit</label></div>
+        </div>
+      </div>
+      <div class="topic-subtopics"><span class="pill warn">childhood/developmental (ADHD, autism, conduct, attachment)</span><span class="pill">mood disorders (speed not accuracy — fast recognition)</span></div>
+      <div class="topic-note">Strongest rotation (EPC 94). <strong>Fix speed, not knowledge.</strong></div>
+    </div>
+
+    <div class="topic-card" id="card-bio">
+      <div class="topic-header"><span class="topic-name">Biostatistics</span>
+        <div class="topic-controls">
+          <input class="where-input" placeholder="UW / AMBOSS" id="where-bio" oninput="schedSave()">
+          <div class="check-group"><input type="checkbox" id="vis-bio" onchange="updateProgress();markDone('bio');schedSave()"><label for="vis-bio">Visited</label></div>
+          <div class="check-group"><input type="checkbox" id="rev-bio" onchange="schedSave()"><label for="rev-bio">Revisit</label></div>
+        </div>
+      </div>
+      <div class="topic-subtopics"><span class="pill warn">sensitivity / specificity / PPV / NPV</span><span class="pill warn">bias types (selection, recall, lead-time)</span></div>
+      <div class="topic-note">30% error rate on only 10 total Qs. Small ceiling to raise — 4–6 Qs is enough.</div>
+    </div>
+
+    <div class="topic-card" id="card-msk">
+      <div class="topic-header"><span class="topic-name">MSK</span>
+        <div class="topic-controls">
+          <input class="where-input" placeholder="UW / AMBOSS" id="where-msk" oninput="schedSave()">
+          <div class="check-group"><input type="checkbox" id="vis-msk" onchange="updateProgress();markDone('msk');schedSave()"><label for="vis-msk">Visited</label></div>
+          <div class="check-group"><input type="checkbox" id="rev-msk" onchange="schedSave()"><label for="rev-msk">Revisit</label></div>
+        </div>
+      </div>
+      <div class="topic-subtopics"><span class="pill warn">septic arthritis vs osteomyelitis (workup + management)</span><span class="pill">inflammatory arthritis (RA vs gout vs pseudogout vs reactive)</span></div>
+      <div class="topic-note">40% in Surgery specifically. Slow-correct/miss overlap on inflammatory confirms uncertainty beyond surgical context.</div>
+    </div>
+  </div>
+
+  <div class="section-block">
+    <div class="section-tag tag-skip">○ Skip — solid enough, don't spend time here</div>
+    <div class="skip-list">
+      <div class="skip-item"><span class="skip-badge">✓ Solid</span><div><div class="skip-item-name">Renal / Urinary</div><div class="skip-item-reason">Resolved to 0% in last 2 rotations</div></div></div>
+      <div class="skip-item"><span class="skip-badge">✓ Solid</span><div><div class="skip-item-name">Dermatology / Skin</div><div class="skip-item-reason">4 total misses all year, no pattern</div></div></div>
+      <div class="skip-item"><span class="skip-badge">✓ Solid</span><div><div class="skip-item-name">Social Sciences / Ethics</div><div class="skip-item-reason">8% error rate — reasoning over memorization anyway</div></div></div>
+      <div class="skip-item"><span class="skip-badge">✓ Solid</span><div><div class="skip-item-name">Immunology</div><div class="skip-item-reason">1 miss all year</div></div></div>
+      <div class="skip-item"><span class="skip-badge">✓ Solid</span><div><div class="skip-item-name">General Principles</div><div class="skip-item-reason">23% early → 7% late, lifecycle questions are context-dependent</div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- PHASE 2 -->
+<div id="tab-phase2" class="tab-content">
+  <div class="section-block">
+    <div class="section-tag tag-phase">CSSE Results</div>
+    <div class="topic-card">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div><div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:4px">CSSE SCORE</div><input class="score-input" placeholder="Fill in June 12..." id="csse-score" oninput="schedSave()"></div>
+        <div><div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:4px">PLANNED NBME 1 DATE</div><input class="score-input" placeholder="e.g. July 1" id="nbme-date" oninput="schedSave()"></div>
+      </div>
+      <div><div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:4px">WEAK AREAS FLAGGED BY CSSE</div><input class="score-input" placeholder="Fill in after June 12..." id="csse-weak" oninput="schedSave()"></div>
+    </div>
+  </div>
+  <div class="section-block">
+    <div class="section-tag tag-phase">NBME Practice Forms</div>
+    <div class="exam-grid" id="nbme-grid"></div>
+  </div>
+  <div class="section-block">
+    <div class="section-tag tag-phase">Self-Assessments</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
+      <div class="resource-group"><div class="resource-title">UWorld SAs</div>
+        <div class="resource-item"><input type="checkbox" id="uw-sa1" onchange="schedSave()"><label for="uw-sa1">SA 1</label></div>
+        <div class="resource-item"><input type="checkbox" id="uw-sa2" onchange="schedSave()"><label for="uw-sa2">SA 2</label></div>
+        <div class="resource-item"><input type="checkbox" id="uw-sa3" onchange="schedSave()"><label for="uw-sa3">SA 3</label></div>
+      </div>
+      <div class="resource-group"><div class="resource-title">AMBOSS SA</div>
+        <div class="resource-item"><input type="checkbox" id="am-sa1" onchange="schedSave()"><label for="am-sa1">SA 1</label></div>
+      </div>
+      <div class="resource-group"><div class="resource-title">CMS Remaining</div>
+        <div class="resource-item"><input type="checkbox" id="cms-im" onchange="schedSave()"><label for="cms-im">Internal Medicine</label></div>
+        <div class="resource-item"><input type="checkbox" id="cms-su" onchange="schedSave()"><label for="cms-su">Surgery</label></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SESSIONS -->
+<div id="tab-sessions" class="tab-content">
+  <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 20px;overflow-x:auto">
+    <table class="log-table">
+      <thead><tr><th style="width:95px">Date</th><th style="width:75px">UW Qs</th><th style="width:90px">AMBOSS Qs</th><th style="min-width:180px">Systems Covered</th><th>Notes</th></tr></thead>
+      <tbody id="session-body"></tbody>
+    </table>
+    <button class="add-row-btn" onclick="addSessionRow()">+ Add session</button>
+  </div>
+</div>
+
+<!-- MISSED -->
+<div id="tab-missed" class="tab-content">
+  <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 20px;overflow-x:auto">
+    <table class="log-table">
+      <thead><tr><th style="width:140px">Topic</th><th>What you missed</th><th style="width:110px">Source</th><th style="width:90px">Date</th></tr></thead>
+      <tbody id="missed-body"></tbody>
+    </table>
+    <button class="add-row-btn" onclick="addMissedRow()">+ Add missed concept</button>
+  </div>
+</div>
+
+<!-- RESOURCES -->
+<div id="tab-resources" class="tab-content">
+  <div class="resource-group">
+    <div class="resource-title">UWorld — Unfinished Question Banks (morning blocks)</div>
+    <div class="resource-item"><input type="checkbox" id="uw-peds" onchange="schedSave()"><label for="uw-peds">Peds</label></div>
+    <div class="resource-item"><input type="checkbox" id="uw-em" onchange="schedSave()"><label for="uw-em">EM</label></div>
+    <div class="resource-item"><input type="checkbox" id="uw-neuro" onchange="schedSave()"><label for="uw-neuro">Neuro</label></div>
+    <div class="resource-item"><input type="checkbox" id="uw-im" onchange="schedSave()"><label for="uw-im">IM</label></div>
+  </div>
+  <div class="resource-group">
+    <div class="resource-title">AMBOSS — <a href="https://next.amboss.com/us/courses?area=general" style="color:var(--blue);font-size:12px" target="_blank">courses link ↗</a></div>
+    <div class="resource-item"><input type="checkbox" id="am-200" onchange="schedSave()"><label for="am-200">200 Concepts</label></div>
+    <div class="resource-item"><input type="checkbox" id="am-rf" onchange="schedSave()"><label for="am-rf">High Yield Risk Factors</label></div>
+    <div class="resource-item"><input type="checkbox" id="am-bs" onchange="schedSave()"><label for="am-bs">High Yield Biostats</label></div>
+    <div class="resource-item"><input type="checkbox" id="am-eth" onchange="schedSave()"><label for="am-eth">High Yield Ethics</label></div>
+    <div class="resource-item"><input type="checkbox" id="am-nut" onchange="schedSave()"><label for="am-nut">High Yield Nutrition</label></div>
+  </div>
+  <div class="resource-group">
+    <div class="resource-title">Mehlman — supplement only</div>
+    <div class="resource-item"><input type="checkbox" id="meh-arr" onchange="schedSave()"><label for="meh-arr">Arrows</label></div>
+    <div class="resource-item"><input type="checkbox" id="meh-rf" onchange="schedSave()"><label for="meh-rf">Risk Factors</label></div>
+  </div>
+</div>
+
+</div><!-- end .main -->
+</div><!-- end #app -->
+
+<!-- Google API -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
