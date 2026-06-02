@@ -17,19 +17,16 @@
   --text:#1A202C;--muted:#718096;
 }
 body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-height:100vh}
-/* AUTH SCREEN */
 .auth-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--navy)}
 .auth-box{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:2.5rem;text-align:center;max-width:400px;width:90%}
 .auth-title{font-family:'DM Serif Display',serif;font-size:26px;color:#fff;margin-bottom:8px}
 .auth-sub{font-size:13px;color:rgba(255,255,255,0.5);margin-bottom:2rem;font-family:'DM Mono',monospace}
 .google-btn{display:flex;align-items:center;gap:10px;background:#fff;color:#1A202C;border:none;border-radius:8px;padding:12px 20px;font-size:14px;font-weight:500;cursor:pointer;width:100%;justify-content:center;font-family:'DM Sans',sans-serif;transition:opacity .15s}
 .google-btn:hover{opacity:0.9}
-.google-btn svg{flex-shrink:0}
 .sync-status{font-size:11px;font-family:'DM Mono',monospace;padding:3px 10px;border-radius:99px;display:inline-flex;align-items:center;gap:5px}
 .sync-ok{background:rgba(39,103,73,0.2);color:#9AE6B4}
 .sync-saving{background:rgba(201,168,76,0.2);color:var(--gold)}
 .sync-err{background:rgba(155,35,53,0.2);color:#FC8181}
-/* HEADER */
 .header{background:var(--navy);padding:2rem 2.5rem 1.5rem;position:relative;overflow:hidden}
 .header::before{content:'';position:absolute;top:-60px;right:-60px;width:280px;height:280px;border-radius:50%;background:rgba(43,108,176,0.15);pointer-events:none}
 .header::after{content:'';position:absolute;bottom:-80px;left:30%;width:200px;height:200px;border-radius:50%;background:rgba(201,168,76,0.08);pointer-events:none}
@@ -41,15 +38,10 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
 .countdown-box{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:10px 16px;text-align:center;min-width:80px}
 .countdown-num{font-family:'DM Mono',monospace;font-size:24px;font-weight:500;color:var(--gold);line-height:1}
 .countdown-label{font-size:10px;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
-.how-to{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 16px;margin-top:1.25rem;display:flex;flex-wrap:wrap;gap:12px 24px}
-.how-to-item{font-size:12px;color:rgba(255,255,255,0.55);font-family:'DM Mono',monospace}
-.how-to-item strong{color:rgba(255,255,255,0.85);font-weight:500}
-/* TABS */
 .tabs{background:var(--navy2);display:flex;border-bottom:1px solid rgba(255,255,255,0.08);padding:0 2.5rem;overflow-x:auto}
 .tab{font-size:13px;font-weight:400;color:rgba(255,255,255,0.45);padding:12px 16px;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;font-family:'DM Mono',monospace;user-select:none}
 .tab:hover{color:rgba(255,255,255,0.7)}
 .tab.active{color:#fff;border-bottom-color:var(--gold);font-weight:500}
-/* MAIN */
 .main{padding:1.5rem 2.5rem 4rem;max-width:900px;margin:0 auto}
 .section-block{margin-bottom:2rem}
 .section-tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;padding:4px 10px;border-radius:4px;margin-bottom:12px}
@@ -147,12 +139,6 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
       <span id="sync-badge" class="sync-status sync-ok">● Synced</span>
     </div>
   </div>
-  <div class="how-to">
-    <div class="how-to-item"><strong>Visited</strong> = done a question block</div>
-    <div class="how-to-item"><strong>Where</strong> = UWorld / AMBOSS / Both</div>
-    <div class="how-to-item"><strong>Revisit</strong> = leave blank if solid</div>
-    <div class="how-to-item"><strong>Syncs automatically</strong> to your Google Drive Doc</div>
-  </div>
 </div>
 
 <div class="tabs">
@@ -160,6 +146,7 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
   <div class="tab" onclick="showTab('phase2',this)">Phase 2 — Post-CSSE</div>
   <div class="tab" onclick="showTab('sessions',this)">Session Log</div>
   <div class="tab" onclick="showTab('missed',this)">Missed Concepts</div>
+  <div class="tab" onclick="showTab('notes',this)">Notes</div>
   <div class="tab" onclick="showTab('resources',this)">Resources</div>
 </div>
 
@@ -220,7 +207,7 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
         </div>
       </div>
       <div class="topic-subtopics"><span class="pill warn">congenital heart disease</span><span class="pill warn">infectious (endocarditis/myocarditis/pericarditis)</span><span class="pill warn">dysrhythmias</span><span class="pill">peripheral vascular disease</span><span class="pill">valvular disease</span><span class="pill skip-pill">skip: HF / HTN / ischemia</span></div>
-      <div class="topic-note">21% error rate across 4 rotations. <strong>IM2 shelf Cardio 67%</strong> — only below-avg shelf sub-score all year. Slow-corrects on valvular + congenital overlap with misses.</div>
+      <div class="topic-note">21% error rate across 4 rotations. <strong>IM2 shelf Cardio 67%</strong> — only below-avg shelf sub-score all year.</div>
     </div>
 
     <div class="topic-card" id="card-endo">
@@ -232,7 +219,7 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
         </div>
       </div>
       <div class="topic-subtopics"><span class="pill warn">thyroid (full spectrum: workup, thyroiditis, nodules, cancer, screening)</span><span class="pill warn">diabetes (management + complications)</span><span class="pill">adrenal disorders</span><span class="pill">parathyroid / calcium</span></div>
-      <div class="topic-note">5 thyroid misses across FM/Peds/Medicine. Parathyroid has 3 slow-corrects with no misses yet — likely getting lucky. Diabetes and adrenal have slow-correct/miss overlap.</div>
+      <div class="topic-note">5 thyroid misses across FM/Peds/Medicine. Parathyroid has 3 slow-corrects with no misses yet — likely getting lucky.</div>
     </div>
 
     <div class="topic-card" id="card-multi">
@@ -393,6 +380,17 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
   </div>
 </div>
 
+<!-- NOTES -->
+<div id="tab-notes" class="tab-content">
+  <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+      <input id="new-section-name" placeholder="New section name (e.g. Thyroid, OB pearls...)" style="font-family:'DM Sans',sans-serif;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:7px 12px;outline:none;flex:1;color:var(--text);background:var(--gray-light)" onfocus="this.style.background='#fff';this.style.borderColor='var(--blue-mid)'" onblur="this.style.background='var(--gray-light)';this.style.borderColor='var(--border)'">
+      <button class="add-row-btn" style="margin-top:0;white-space:nowrap" onclick="addNotesSection()">+ Add section</button>
+    </div>
+    <div id="notes-sections"></div>
+  </div>
+</div>
+
 <!-- RESOURCES -->
 <div id="tab-resources" class="tab-content">
   <div class="resource-group">
@@ -417,10 +415,9 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
   </div>
 </div>
 
-</div><!-- end .main -->
-</div><!-- end #app -->
+</div>
+</div>
 
-<!-- Google API -->
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="config.js"></script>
