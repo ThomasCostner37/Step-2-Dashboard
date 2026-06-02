@@ -281,19 +281,28 @@ function signOut() {
 function addNotesSection(name, content) {
   const inputEl = document.getElementById('new-section-name');
   const sectionName = name || (inputEl ? inputEl.value.trim() : '') || 'Notes';
-  if (inputEl) inputEl.value = '';
+  if (inputEl && !name) inputEl.value = '';
 
   const id = 'note-' + Date.now() + '-' + Math.random().toString(36).slice(2);
   const div = document.createElement('div');
   div.id = id;
   div.style.cssText = 'margin-bottom:20px';
-  div.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <span class="note-title" style="font-size:14px;font-weight:500;color:var(--text)">${sectionName}</span>
-      <button onclick="document.getElementById('${id}').remove();schedSave()" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background='none'">Remove</button>
-    </div>
-    <textarea oninput="schedSave()" placeholder="Type your notes here..." style="width:100%;min-height:140px;font-family:'DM Sans',sans-serif;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:12px;outline:none;resize:vertical;line-height:1.7;color:var(--text);background:#fff">${content || ''}</textarea>
+
+  const ta = document.createElement('textarea');
+  ta.placeholder = 'Type your notes here...';
+  ta.value = content || '';
+  ta.oninput = () => schedSave();
+  ta.style.cssText = 'width:100%;min-height:140px;font-family:\'DM Sans\',sans-serif;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:12px;box-sizing:border-box;outline:none;resize:vertical;line-height:1.7;color:var(--text);background:#fff;display:block';
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px';
+  header.innerHTML = `
+    <span class="note-title" style="font-size:14px;font-weight:500;color:var(--text)">${sectionName}</span>
+    <button onclick="document.getElementById('${id}').remove();schedSave()" style="font-size:11px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px" onmouseover="this.style.background='var(--gray-light)'" onmouseout="this.style.background='none'">Remove</button>
   `;
+
+  div.appendChild(header);
+  div.appendChild(ta);
   document.getElementById('notes-sections').appendChild(div);
 }
 
