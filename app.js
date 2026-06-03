@@ -51,6 +51,121 @@ const SHELF_SCORES = [
   { date:'2026-06-01', label:'IM Shelf 2',       score:84 },
 ];
 
+// ── EPC Subscore Data (Shelf 2 only per rotation) ────────
+const EPC_DATA = {
+  'Family Med': {
+    epc: 87, avg: 73,
+    subscores: [
+      { label:'MSK & Skin',                    you:95, avg:77 },
+      { label:'Cardiovascular & Respiratory',  you:92, avg:70 },
+      { label:'Chronic Care',                  you:88, avg:73 },
+      { label:'Health Maint, Pharm & Mgmt',    you:86, avg:72 },
+      { label:'Diagnosis incl Foundational',   you:94, avg:74 },
+      { label:'Pediatric (0–17)',               you:90, avg:71 },
+      { label:'Adult (18–65)',                  you:86, avg:72 },
+    ]
+  },
+  'Pediatrics': {
+    epc: 87, avg: 76,
+    subscores: [
+      { label:'Skin, Neuro & MSK',             you:89, avg:76 },
+      { label:'Cardiovascular & Respiratory',  you:86, avg:70 },
+      { label:'Female Repro, OB & Endo',       you:94, avg:78 },
+      { label:'Applying Foundational Science', you:98, avg:75 },
+      { label:'Diagnosis',                     you:81, avg:76 },
+      { label:'Health Maint, Pharm & Mgmt',    you:86, avg:77 },
+    ]
+  },
+  'Surgery': {
+    epc: 83, avg: 76,
+    subscores: [
+      { label:'Female Repro, Breast & Endo',   you:80, avg:76 },
+      { label:'Applying Foundational Science', you:66, avg:73 },
+      { label:'Respiratory System',            you:69, avg:73 },
+      { label:'Gastrointestinal System',       you:90, avg:78 },
+      { label:'Skin, Neuro & MSK',             you:91, avg:75 },
+      { label:'Diagnosis',                     you:89, avg:77 },
+      { label:'Pharm, Intervention & Mgmt',    you:83, avg:73 },
+      { label:'Cardiovascular System',         you:97, avg:75 },
+    ]
+  },
+  'Psychiatry': {
+    epc: 94, avg: 85,
+    subscores: [
+      { label:'Psychotic Disorders',           you:94, avg:84 },
+      { label:'Anxiety Disorders',             you:97, avg:86 },
+      { label:'Mood Disorders',                you:98, avg:85 },
+      { label:'Substance Use Disorders',       you:90, avg:83 },
+      { label:'Diseases of Nervous System',    you:65, avg:77 },
+      { label:'Diagnosis incl Foundational',   you:94, avg:85 },
+      { label:'Pharm, Intervention & Mgmt',    you:90, avg:82 },
+    ]
+  },
+  'OB/GYN': {
+    epc: 83, avg: 78,
+    subscores: [
+      { label:'Female Reproductive & Breast',  you:83, avg:79 },
+      { label:'Obstetric Complications',       you:97, avg:74 },
+      { label:'Health Maint, Prevention',      you:73, avg:75 },
+      { label:'Applying Foundational Science', you:86, avg:80 },
+      { label:'Diagnosis',                     you:89, avg:79 },
+      { label:'Pharm, Intervention & Mgmt',    you:82, avg:75 },
+    ]
+  },
+  'Internal Med': {
+    epc: 84, avg: 73,
+    subscores: [
+      { label:'Cardiovascular System',         you:67, avg:72 },
+      { label:'Respiratory System',            you:81, avg:72 },
+      { label:'Gastrointestinal System',       you:75, avg:73 },
+      { label:'Female, Male Repro & Endo',     you:90, avg:73 },
+      { label:'Skin, Neuro & MSK',             you:81, avg:74 },
+      { label:'Applying Foundational Science', you:93, avg:74 },
+      { label:'Diagnosis',                     you:81, avg:73 },
+      { label:'Health Maint, Pharm & Mgmt',    you:89, avg:74 },
+    ]
+  },
+};
+
+// ── CMS Question Data (aggregated from raw) ───────────────
+// Aggregated from Raw CMS sheet — questions + incorrect counts per topic
+const CMS_RAW = [
+  { topic:'Endo: thyroid disorders',                   total:14, incorrect:6 },
+  { topic:'Behavioral: disorders infancy/childhood',   total:10, incorrect:4 },
+  { topic:'Gastro: congenital disorders',              total:7,  incorrect:3 },
+  { topic:'Resp: upper airway disorders',              total:9,  incorrect:4 },
+  { topic:'Biostat: sensitivity/specificity',          total:8,  incorrect:3 },
+  { topic:'OB: obstetric complications',               total:20, incorrect:6 },
+  { topic:'OB: labor and delivery',                    total:18, incorrect:5 },
+  { topic:'OB: supervision of normal pregnancy',       total:12, incorrect:3 },
+  { topic:'OB: systemic disorders/pregnancy',         total:10, incorrect:3 },
+  { topic:'F Repro: menstrual/endocrine disorders',    total:22, incorrect:5 },
+  { topic:'F Repro: infectious/inflammatory',          total:24, incorrect:4 },
+  { topic:'F Repro: malignant/precancerous neoplasms', total:10, incorrect:2 },
+  { topic:'F Repro: fertility and infertility',        total:8,  incorrect:3 },
+  { topic:'F Repro: benign neoplasms and cysts',       total:10, incorrect:1 },
+  { topic:'F Repro: menopause',                        total:7,  incorrect:3 },
+  { topic:'Cardio: ischemic heart disease',            total:14, incorrect:2 },
+  { topic:'Cardio: infectious disorders',              total:7,  incorrect:2 },
+  { topic:'Cardio: peripheral arterial vascular',      total:6,  incorrect:2 },
+  { topic:'Cardio: dysrhythmias',                      total:6,  incorrect:2 },
+  { topic:'Cardio: congenital disorders',              total:6,  incorrect:2 },
+  { topic:'Resp: obstructive airway disease',          total:12, incorrect:3 },
+  { topic:'Resp: lower airway inf/inflammatory',       total:10, incorrect:1 },
+  { topic:'Gastro: immunologic/inflammatory',          total:10, incorrect:3 },
+  { topic:'Gastro: small intestine/colon disorders',   total:12, incorrect:2 },
+  { topic:'Gastro: bacterial infections',              total:7,  incorrect:2 },
+  { topic:'Blood: anemias: decreased production',      total:8,  incorrect:2 },
+  { topic:'Blood: reactions to blood components',      total:5,  incorrect:1 },
+  { topic:'CNS: cerebrovascular disease',              total:6,  incorrect:1 },
+  { topic:'GenPrin: childhood developmental stages',   total:7,  incorrect:3 },
+  { topic:'GenPrin: adulthood lifestyle/changes',      total:8,  incorrect:2 },
+  { topic:'SocialSci: consent/informed consent',       total:6,  incorrect:2 },
+  { topic:'Multi: fluid/electrolyte disorders',        total:7,  incorrect:2 },
+  { topic:'MSK: inflammatory disorders',               total:7,  incorrect:1 },
+  { topic:'Renal/Urin: adverse effects of drugs',      total:5,  incorrect:2 },
+];
+
 // ── State ─────────────────────────────────────────────────
 let state = {
   topics:            [],
@@ -68,12 +183,15 @@ let state = {
 };
 
 let tokenClient;
-let saveTimer      = null;
-let shelfChart     = null;
-let scoreView      = 'shelf';
+let saveTimer         = null;
+let shelfChart        = null;
+let scoreView         = 'shelf';
 let activeTopicFilter = 'all';
-let dragSrcIdx     = null;
-let dragSrcList    = null;
+let dragSrcIdx        = null;
+let dragSrcList       = null;
+let epcRotation       = 'Family Med';
+let epcSortDir        = 'asc';
+let cmsFilter         = '5plus';
 
 // ── Init ──────────────────────────────────────────────────
 window.onload = function () {
@@ -396,6 +514,8 @@ function injectStyles() {
     @media (max-width:700px) {
       .dash-grid { grid-template-columns:1fr; }
     }
+    .btn-xs.active { color:var(--accent-text); border-color:rgba(176,120,48,.35); background:var(--accent-glow); }
+    .epc-rot-btn.active { color:var(--accent-text) !important; border-color:rgba(176,120,48,.35) !important; background:var(--accent-glow) !important; }
   `;
   document.head.appendChild(s);
 }
@@ -562,6 +682,9 @@ function renderAll() {
   renderWeakSpots();
   renderTopics();
   renderResources();
+  renderEpcOverview();
+  renderEpcBars();
+  renderCmsTable();
   renderNBME();
   renderCMS();
   renderMissedSessions();
@@ -1202,6 +1325,159 @@ function makeDraggable(el, idx, arr, onDrop) {
     onDrop(arr);
   });
   el.addEventListener('dragend', () => { el.style.opacity = ''; });
+}
+
+// ── EPC Breakdown ─────────────────────────────────────────
+function setEpcSort(dir) {
+  epcSortDir = dir;
+  document.getElementById('epc-sort-asc').classList.toggle('active', dir === 'asc');
+  document.getElementById('epc-sort-desc').classList.toggle('active', dir === 'desc');
+  renderEpcBars();
+}
+
+function setEpcRotation(rot) {
+  epcRotation = rot;
+  document.querySelectorAll('.epc-rot-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.rot === rot);
+  });
+  renderEpcBars();
+}
+
+function renderEpcOverview() {
+  const grid = document.getElementById('epc-overview-grid');
+  const btns = document.getElementById('epc-rotation-btns');
+  if (!grid || !btns) return;
+
+  grid.innerHTML = '';
+  btns.innerHTML = '';
+
+  Object.entries(EPC_DATA).forEach(([name, data]) => {
+    const diff = data.epc - data.avg;
+    const diffStr = (diff >= 0 ? '+' : '') + diff;
+    const diffColor = diff >= 0 ? '#3B6D11' : '#A32D2D';
+
+    const tile = document.createElement('div');
+    tile.style.cssText = 'background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-sm);padding:.55rem .7rem;cursor:pointer';
+    tile.innerHTML = `
+      <div style="font-family:var(--font-mono);font-size:.6rem;color:var(--text-tertiary);margin-bottom:3px">${escH(name)}</div>
+      <div style="font-family:var(--font-display);font-size:1.3rem;font-weight:800;color:var(--accent);line-height:1">${data.epc}</div>
+      <div style="font-family:var(--font-mono);font-size:.6rem;color:${diffColor};margin-top:2px">${diffStr} vs avg</div>
+    `;
+    tile.onclick = () => setEpcRotation(name);
+    grid.appendChild(tile);
+
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-ghost btn-sm epc-rot-btn' + (name === epcRotation ? ' active' : '');
+    btn.dataset.rot = name;
+    btn.textContent = name;
+    btn.onclick = () => setEpcRotation(name);
+    btns.appendChild(btn);
+  });
+}
+
+function renderEpcBars() {
+  const container = document.getElementById('epc-bars');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const data = EPC_DATA[epcRotation];
+  if (!data) return;
+
+  let subs = [...data.subscores];
+  if (epcSortDir === 'asc') {
+    subs.sort((a,b) => a.you - b.you);
+  } else {
+    subs.sort((a,b) => b.you - a.you);
+  }
+
+  subs.forEach(sub => {
+    const diff = sub.you - sub.avg;
+    const barColor = diff >= 3 ? '#639922' : diff <= -3 ? '#E24B4A' : '#888780';
+    const diffColor = diff >= 3 ? '#3B6D11' : diff <= -3 ? '#A32D2D' : 'var(--text-tertiary)';
+    const diffBg = diff >= 3 ? '#EAF3DE' : diff <= -3 ? '#FCEBEB' : 'var(--bg-subtle)';
+    const diffStr = (diff >= 0 ? '+' : '') + diff;
+    const maxW = 100;
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:7px';
+    row.innerHTML = `
+      <div style="font-family:var(--font-mono);font-size:.7rem;color:var(--text-secondary);width:195px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escH(sub.label)}">${escH(sub.label)}</div>
+      <div style="flex:1;height:11px;background:var(--bg-subtle);border-radius:3px;overflow:hidden;position:relative;min-width:0">
+        <div style="height:100%;width:${sub.avg}%;background:#B5D4F4;border-radius:3px;position:absolute;top:0;left:0"></div>
+        <div style="height:100%;width:${sub.you}%;background:${barColor};border-radius:3px;position:absolute;top:0;left:0"></div>
+      </div>
+      <div style="font-family:var(--font-mono);font-size:.7rem;font-weight:600;color:${barColor};width:32px;text-align:right;flex-shrink:0">${sub.you}%</div>
+      <div style="font-family:var(--font-mono);font-size:.6rem;width:36px;text-align:center;padding:1px 4px;border-radius:3px;background:${diffBg};color:${diffColor};flex-shrink:0">${diffStr}</div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+// ── CMS Performance Table ─────────────────────────────────
+function setCmsFilter(f) {
+  cmsFilter = f;
+  document.getElementById('cms-filter-5plus').classList.toggle('active', f === '5plus');
+  document.getElementById('cms-filter-all').classList.toggle('active', f === 'all');
+  renderCmsTable();
+}
+
+function renderCmsTable() {
+  const container = document.getElementById('cms-table');
+  if (!container) return;
+  container.innerHTML = '';
+
+  let rows = CMS_RAW.map(r => ({
+    ...r,
+    pct: Math.round(((r.total - r.incorrect) / r.total) * 100)
+  }));
+
+  if (cmsFilter === '5plus') {
+    rows = rows.filter(r => r.incorrect >= 5);
+  }
+
+  rows.sort((a,b) => a.pct - b.pct);
+
+  if (!rows.length) {
+    container.innerHTML = '<div style="font-family:var(--font-mono);font-size:.78rem;color:var(--text-tertiary);padding:.5rem 0">No topics match filter</div>';
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.style.cssText = 'width:100%;border-collapse:collapse;font-size:.82rem';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th style="text-align:left;font-family:var(--font-mono);font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-tertiary);padding:0 8px 8px 0;border-bottom:1px solid var(--border);width:42%">Topic</th>
+        <th style="text-align:right;font-family:var(--font-mono);font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-tertiary);padding:0 8px 8px;border-bottom:1px solid var(--border);width:8%">Qs</th>
+        <th style="text-align:right;font-family:var(--font-mono);font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-tertiary);padding:0 8px 8px;border-bottom:1px solid var(--border);width:10%">Wrong</th>
+        <th style="text-align:right;font-family:var(--font-mono);font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-tertiary);padding:0 8px 8px 0;border-bottom:1px solid var(--border);width:12%">% Correct</th>
+        <th style="padding:0 0 8px;border-bottom:1px solid var(--border);width:28%"></th>
+      </tr>
+    </thead>
+    <tbody id="cms-tbody"></tbody>
+  `;
+  container.appendChild(table);
+
+  const tbody = document.getElementById('cms-tbody');
+  rows.forEach(r => {
+    const badgeColor = r.pct < 65 ? '#A32D2D' : r.pct < 80 ? '#633806' : '#27500A';
+    const badgeBg    = r.pct < 65 ? '#FCEBEB' : r.pct < 80 ? '#FAEEDA' : '#EAF3DE';
+    const barColor   = r.pct < 65 ? '#E24B4A' : r.pct < 80 ? '#EF9F27' : '#639922';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="padding:.6rem 8px .6rem 0;border-bottom:1px solid var(--border);font-family:var(--font-mono);font-size:.72rem;color:var(--text-primary)">${escH(r.topic)}</td>
+      <td style="padding:.6rem 8px;border-bottom:1px solid var(--border);font-family:var(--font-mono);font-size:.72rem;color:var(--text-tertiary);text-align:right">${r.total}</td>
+      <td style="padding:.6rem 8px;border-bottom:1px solid var(--border);font-family:var(--font-mono);font-size:.72rem;color:var(--text-tertiary);text-align:right">${r.incorrect}</td>
+      <td style="padding:.6rem 8px .6rem 0;border-bottom:1px solid var(--border);text-align:right">
+        <span style="font-family:var(--font-mono);font-size:.65rem;padding:1px 6px;border-radius:10px;background:${badgeBg};color:${badgeColor}">${r.pct}%</span>
+      </td>
+      <td style="padding:.6rem 0;border-bottom:1px solid var(--border)">
+        <div style="height:6px;border-radius:3px;background:${barColor};width:${r.pct}%;max-width:100%"></div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
 }
 
 // ── Assessments ───────────────────────────────────────────

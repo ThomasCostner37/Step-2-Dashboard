@@ -600,6 +600,38 @@ select.input { cursor: pointer; }
 
   <!-- ASSESSMENTS -->
   <div id="tab-assessments" class="tab-panel">
+
+    <!-- EPC Overview + Breakdown -->
+    <div class="assess-section">
+      <div class="section-label">Shelf EPC by Rotation</div>
+      <div id="epc-overview-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:16px"></div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px" id="epc-rotation-btns"></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-family:var(--font-mono);font-size:.62rem;color:var(--text-tertiary)">Sort:</span>
+        <button class="btn btn-ghost btn-xs active" id="epc-sort-asc" onclick="setEpcSort('asc')">Low → High</button>
+        <button class="btn btn-ghost btn-xs" id="epc-sort-desc" onclick="setEpcSort('desc')">High → Low</button>
+      </div>
+      <div style="display:flex;gap:12px;font-family:var(--font-mono);font-size:.6rem;color:var(--text-tertiary);margin-bottom:10px">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#378ADD;margin-right:3px"></span>Your score</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#B5D4F4;margin-right:3px"></span>National avg</span>
+      </div>
+      <div id="epc-bars"></div>
+    </div>
+
+    <!-- CMS Performance -->
+    <div class="assess-section">
+      <div class="section-label">CMS Performance by Topic</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <span style="font-family:var(--font-mono);font-size:.72rem;color:var(--text-secondary)">Sorted by % correct · lowest first</span>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-ghost btn-xs active" id="cms-filter-5plus" onclick="setCmsFilter('5plus')">≥5 questions incorrect</button>
+          <button class="btn btn-ghost btn-xs" id="cms-filter-all" onclick="setCmsFilter('all')">All topics</button>
+        </div>
+      </div>
+      <div id="cms-table"></div>
+    </div>
+
+    <!-- NBME Self Assessments -->
     <div class="assess-section">
       <div class="section-label">NBME Self Assessments</div>
       <div id="nbme-list"></div>
@@ -610,6 +642,8 @@ select.input { cursor: pointer; }
         <button class="btn btn-primary btn-sm" onclick="addNBMEScore()">Add</button>
       </div>
     </div>
+
+    <!-- CMS / Other Forms -->
     <div class="assess-section">
       <div class="section-label">CMS / Other Forms</div>
       <div id="cms-list"></div>
