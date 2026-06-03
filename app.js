@@ -6,51 +6,6 @@ const SCOPES = 'https://www.googleapis.com/auth/documents';
 
 const TOPICS = []; // All topics are user-managed; seeded from data on first load
 
-// Topics derived from EPC (below national avg OR below 80%) and CMS (<80% correct, ≥5 incorrect)
-const DEFAULT_TOPICS = [
-  // ── EPC weak spots ──────────────────────────────────────
-  // Family Med Shelf 2
-  { name:'FM — Older Adult (66+)',                    src:'epc' },
-  // Pediatrics Shelf 2 — none below avg or <80
-  // Surgery Shelf 2
-  { name:'Surgery — Female Repro, Breast & Endo',    src:'epc' },
-  { name:'Surgery — Applying Foundational Science',  src:'epc' },
-  { name:'Surgery — Respiratory System',             src:'epc' },
-  { name:'Surgery — Pharmacotherapy & Mgmt',         src:'epc' },
-  // Psychiatry Shelf 2
-  { name:'Psych — Diseases of Nervous System',       src:'epc' },
-  // OB/GYN Shelf 2
-  { name:'OB/GYN — Health Maint & Prevention',       src:'epc' },
-  // Internal Med Shelf 2
-  { name:'IM — Cardiovascular System',               src:'epc' },
-  { name:'IM — Respiratory System',                  src:'epc' },
-  { name:'IM — Gastrointestinal System',             src:'epc' },
-  { name:'IM — Diagnosis',                           src:'epc' },
-  // ── CMS weak spots (<80% correct, ≥5 incorrect) ─────────
-  { name:'Endo: thyroid disorders',                  src:'cms' },
-  { name:'Behavioral: disorders infancy/childhood',  src:'cms' },
-  { name:'Gastro: congenital disorders',             src:'cms' },
-  { name:'Resp: upper airway disorders',             src:'cms' },
-  { name:'Biostat: sensitivity/specificity',         src:'cms' },
-  { name:'OB: obstetric complications',              src:'cms' },
-  { name:'OB: labor and delivery',                   src:'cms' },
-  { name:'OB: supervision of normal pregnancy',      src:'cms' },
-  { name:'OB: systemic disorders in pregnancy',      src:'cms' },
-  { name:'F Repro: menstrual/endocrine disorders',   src:'cms' },
-  { name:'F Repro: fertility and infertility',       src:'cms' },
-  { name:'F Repro: menopause',                       src:'cms' },
-  { name:'Cardio: infectious disorders',             src:'cms' },
-  { name:'Cardio: peripheral arterial vascular',     src:'cms' },
-  { name:'Cardio: dysrhythmias',                     src:'cms' },
-  { name:'Cardio: congenital disorders',             src:'cms' },
-  { name:'Resp: obstructive airway disease',         src:'cms' },
-  { name:'Gastro: immunologic/inflammatory',         src:'cms' },
-  { name:'Blood: reactions to blood components',     src:'cms' },
-  { name:'GenPrin: childhood developmental stages',  src:'cms' },
-  { name:'Renal/Urin: adverse effects of drugs',     src:'cms' },
-  { name:'Multi: fluid/electrolyte disorders',       src:'cms' },
-];
-
 const DEFAULT_RESOURCES = [
   { group:'UWorld',   name:'Unfinished Peds' },
   { group:'UWorld',   name:'Unfinished EM' },
