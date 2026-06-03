@@ -622,8 +622,10 @@ function showTab(t, el) {
 
 function updateCountdown() {
   const now = new Date();
-  document.getElementById('css-days').textContent = Math.max(0, Math.ceil((new Date('2026-06-12') - now) / 86400000));
-  document.getElementById('step-days').textContent = Math.max(0, Math.ceil((new Date('2026-08-12') - now) / 86400000));
+  const cssEl = document.getElementById('css-days');
+  const stepEl = document.getElementById('step-days');
+  if (cssEl) cssEl.textContent = Math.max(0, Math.ceil((new Date('2026-06-12') - now) / 86400000));
+  if (stepEl) stepEl.textContent = Math.max(0, Math.ceil((new Date('2026-08-12') - now) / 86400000));
 }
 
 function updateProgress() {
