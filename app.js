@@ -2,711 +2,960 @@
 // STEP 2 DASHBOARD — APP LOGIC + GOOGLE DRIVE SYNC
 // ============================================================
 
-const SCOPES = 'https://www.googleapis.com/auth/documents';
-const TOPICS = ['ob','frepro','resp','cardio','endo','multi','blood','cns','gi','beh','bio','msk'];
+const SCOPES   = 'https://www.googleapis.com/auth/documents';
+const TOPICS   = ['ob','frepro','resp','cardio','endo','multi','blood','cns','gi','beh','bio','msk'];
 const NBME_FORMS = ['Form 9','Form 10','Form 11','Form 12','Form 13','Form 14','Form 15','Form 16'];
+const CSSE_DATE  = '2026-06-12';
+const STEP2_DATE = '2026-08-12';
+const GOAL_SCORE = 90; // shelf exam goal %
 
 const SHELF_SCORES = [
-  { date: '2025-08-12', label: 'FM Shelf 1',      score: 82 },
-  { date: '2025-09-12', label: 'FM Shelf 2',      score: 87 },
-  { date: '2025-10-06', label: 'Peds Shelf 1',    score: 87 },
-  { date: '2025-10-31', label: 'Peds Shelf 2',    score: 87 },
-  { date: '2025-11-12', label: 'Surgery Shelf 1', score: 75 },
-  { date: '2025-12-19', label: 'Surgery Shelf 2', score: 83 },
-  { date: '2026-02-13', label: 'Psych Shelf 1',   score: 94 },
-  { date: '2026-03-20', label: 'OB/GYN Shelf 1',  score: 83 },
-  { date: '2026-04-20', label: 'IM Shelf 1',       score: 88 },
-  { date: '2026-05-29', label: 'IM Shelf 2',       score: 84 },
+  { date:'2025-08-12', label:'FM Shelf 1',      score:82 },
+  { date:'2025-09-12', label:'FM Shelf 2',      score:87 },
+  { date:'2025-10-06', label:'Peds Shelf 1',    score:87 },
+  { date:'2025-10-31', label:'Peds Shelf 2',    score:87 },
+  { date:'2025-11-12', label:'Surgery Shelf 1', score:75 },
+  { date:'2025-12-19', label:'Surgery Shelf 2', score:83 },
+  { date:'2026-02-13', label:'Psych Shelf 1',   score:94 },
+  { date:'2026-03-20', label:'Psych Shelf 2',   score:94 },
 ];
 
-let accessToken = null;
-let saveTimer = null;
-let lastSavedState = null;
-let shelfChartInstance = null;
-
-// ============================================================
-// INIT
-// ============================================================
-window.onload = () => {
-  buildNbmeGrid();
-  for (let i = 0; i < 3; i++) addMissedSession();
-  initShelfChart();
-
-  const saved = localStorage.getItem('step2_access_token');
-  if (saved) {
-    accessToken = saved;
-    showApp();
-    loadFromDrive();
-  } else {
-    document.getElementById('auth-screen').style.display = 'flex';
-  }
+// ── State ─────────────────────────────────────────────────
+let state = {
+  topics:         Object.fromEntries(TOPICS.map(t => [t, false])),
+  customTopics:   [],
+  resources:      [],
+  nbmeScores:     [],
+  cmsScores:      [],
+  missedSessions: [],
+  notes:          [],
+  archivedNotes:  [],
+  todayFocus:     { date:'', items:[] },
 };
 
-// ============================================================
-// AUTH
-// ============================================================
-function signIn() {
-  const client = google.accounts.oauth2.initTokenClient({
-    client_id: CONFIG.GOOGLE_CLIENT_ID,
-    scope: SCOPES,
-    callback: (resp) => {
-      if (resp.error) { alert('Sign in failed: ' + resp.error); return; }
-      accessToken = resp.access_token;
-      localStorage.setItem('step2_access_token', accessToken);
-      showApp();
-      loadFromDrive();
-    },
-  });
-  client.requestAccessToken();
+// ── Google OAuth & Drive ──────────────────────────────────
+let tokenClient, gapiReady = false, googleReady = false, accessToken = null;
+let saveTimer = null;
+
+function handleSignIn() {
+  tokenClient.requestAccessToken({ prompt:'' });
 }
-
-function showApp() {
-  document.getElementById('auth-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-}
-
-// ============================================================
-// DRIVE: LOAD
-// ============================================================
-async function loadFromDrive() {
-  setSyncBadge('saving', 'Loading…');
-  try {
-    const res = await fetch(
-      `https://docs.googleapis.com/v1/documents/${CONFIG.DOC_ID}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    if (res.status === 401) { signOut(); return; }
-    const doc = await res.json();
-    const text = extractDocText(doc);
-    const match = text.match(/DASHBOARD_STATE_JSON_START([\s\S]*?)DASHBOARD_STATE_JSON_END/);
-    if (match) {
-      try {
-        const state = JSON.parse(match[1].trim());
-        applyState(state);
-        lastSavedState = JSON.stringify(state);
-      } catch(e) { console.warn('Could not parse saved state'); }
-    }
-    setSyncBadge('ok', 'Synced');
-  } catch(e) {
-    console.error('Load error', e);
-    setSyncBadge('err', 'Load failed');
-    const local = localStorage.getItem('step2checklist');
-    if (local) applyState(JSON.parse(local));
-  }
-}
-
-// ============================================================
-// DRIVE: SAVE
-// ============================================================
-async function saveToDrive() {
-  const state = collectState();
-  const stateStr = JSON.stringify(state);
-  if (stateStr === lastSavedState) return;
-  setSyncBadge('saving', 'Saving…');
-  localStorage.setItem('step2checklist', stateStr);
-  try {
-    const res = await fetch(
-      `https://docs.googleapis.com/v1/documents/${CONFIG.DOC_ID}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    if (res.status === 401) { signOut(); return; }
-    const doc = await res.json();
-    const text = extractDocText(doc);
-    const marker = 'DASHBOARD_STATE_JSON_START';
-    const endMarker = 'DASHBOARD_STATE_JSON_END';
-    let requests;
-    if (text.includes(marker)) {
-      const startIdx = findTextIndex(doc, marker);
-      const endIdx = findTextIndex(doc, endMarker) + endMarker.length;
-      requests = [
-        { deleteContentRange: { range: { startIndex: startIdx, endIndex: endIdx } } },
-        { insertText: { location: { index: startIdx }, text: `${marker}\n${stateStr}\n${endMarker}` } }
-      ];
-    } else {
-      const endIdx = getDocEndIndex(doc);
-      requests = [{ insertText: { location: { index: endIdx - 1 }, text: `\n\n${marker}\n${stateStr}\n${endMarker}` } }];
-    }
-    const updateRes = await fetch(
-      `https://docs.googleapis.com/v1/documents/${CONFIG.DOC_ID}:batchUpdate`,
-      { method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests }) }
-    );
-    if (updateRes.ok) { lastSavedState = stateStr; setSyncBadge('ok', 'Synced'); }
-    else { const err = await updateRes.json(); console.error('Save error', err); setSyncBadge('err', 'Save failed'); }
-  } catch(e) {
-    console.error('Save error', e);
-    setSyncBadge('err', 'Save failed');
-  }
-}
-
-// ============================================================
-// DOC HELPERS
-// ============================================================
-function extractDocText(doc) {
-  let text = '';
-  for (const block of doc.body?.content || []) {
-    if (block.paragraph) for (const el of block.paragraph.elements || []) text += el.textRun?.content || '';
-  }
-  return text;
-}
-function findTextIndex(doc, searchStr) {
-  let offset = 0;
-  for (const block of doc.body?.content || []) {
-    if (block.paragraph) for (const el of block.paragraph.elements || []) {
-      const t = el.textRun?.content || '';
-      const idx = t.indexOf(searchStr);
-      if (idx !== -1) return offset + idx;
-      offset += t.length;
-    }
-  }
-  return -1;
-}
-function getDocEndIndex(doc) {
-  const content = doc.body?.content || [];
-  return content.length ? (content[content.length - 1].endIndex || 1) : 1;
-}
-
-// ============================================================
-// STATE
-// ============================================================
-function collectState() {
-  const state = {};
-  document.querySelectorAll('input[type=checkbox]').forEach(el => { if (el.id) state[el.id] = el.checked; });
-  document.querySelectorAll('input.score-input').forEach(el => { if (el.id) state[el.id] = el.value; });
-
-  state._missedSessions = [];
-  document.querySelectorAll('.missed-session').forEach(sess => {
-    const title = sess.querySelector('.session-title-input').value;
-    const rows = [];
-    sess.querySelectorAll('.missed-row').forEach(row => {
-      rows.push(Array.from(row.querySelectorAll('input,textarea')).map(i => i.value));
-    });
-    state._missedSessions.push({ title, rows });
-  });
-
-  state._notesSections = [];
-  document.querySelectorAll('#notes-sections > .note-card').forEach(card => {
-    state._notesSections.push({
-      id: card.dataset.id,
-      name: card.querySelector('.note-card-title').textContent,
-      content: card.querySelector('.note-editor').innerHTML
-    });
-  });
-
-  state._archivedSections = [];
-  document.querySelectorAll('#archive-list > .archive-item').forEach(item => {
-    state._archivedSections.push({ name: item.dataset.name, content: item.dataset.content });
-  });
-
-  state._customTopics = [];
-  document.querySelectorAll('#custom-topics-list > .custom-topic-item').forEach(item => {
-    state._customTopics.push({
-      name: item.querySelector('.custom-topic-name').textContent,
-      done: item.querySelector('.custom-topic-check').checked,
-      revisit: item.querySelector('.custom-topic-revisit').checked,
-      where: item.querySelector('.custom-topic-where').value
-    });
-  });
-
-  state._customResources = [];
-  document.querySelectorAll('#custom-resources-list > .resource-custom-item').forEach(item => {
-    state._customResources.push({
-      text: item.querySelector('.res-label').textContent,
-      done: item.querySelector('.res-check').checked
-    });
-  });
-
-  return state;
-}
-
-function applyState(state) {
-  Object.keys(state).forEach(k => {
-    if (k.startsWith('_')) return;
-    const el = document.getElementById(k);
-    if (!el) return;
-    if (el.type === 'checkbox') { el.checked = state[k]; if (k.startsWith('vis-')) markDone(k.replace('vis-', '')); }
-    else el.value = state[k] || '';
-  });
-  NBME_FORMS.forEach((_, i) => {
-    const id = 'nbme-' + i;
-    const el = document.getElementById(id);
-    if (el && state[id]) { el.checked = true; toggleExam(id); }
-  });
-
-  document.getElementById('missed-sessions-container').innerHTML = '';
-  const mSessions = state._missedSessions || [];
-  if (mSessions.length > 0) mSessions.forEach(s => addMissedSession(s.title, s.rows));
-  else for (let i = 0; i < 3; i++) addMissedSession();
-
-  document.getElementById('notes-sections').innerHTML = '';
-  const notes = state._notesSections || [];
-  if (notes.length > 0) notes.forEach(n => addNoteCard(n.name, n.content, n.id));
-  else addNoteCard('General Notes', '');
-
-  document.getElementById('archive-list').innerHTML = '';
-  (state._archivedSections || []).forEach(n => addArchiveItem(n.name, n.content));
-
-  document.getElementById('custom-topics-list').innerHTML = '';
-  (state._customTopics || []).forEach(t => addCustomTopic(t.name, t.done, t.revisit, t.where));
-
-  document.getElementById('custom-resources-list').innerHTML = '';
-  (state._customResources || []).forEach(r => addCustomResource(r.text, r.done));
-
-  updateProgress();
-  updateMissedCount();
-  updateArchiveCount();
-}
-
-function schedSave() {
-  clearTimeout(saveTimer);
-  setSyncBadge('saving', 'Unsaved…');
-  saveTimer = setTimeout(() => saveToDrive(), 1500);
-}
-
-function signOut() {
-  localStorage.removeItem('step2_access_token');
+function handleSignOut() {
   accessToken = null;
-  document.getElementById('app').style.display = 'none';
+  google.accounts.oauth2.revoke(accessToken, ()=>{});
+  document.getElementById('app').classList.remove('visible');
   document.getElementById('auth-screen').style.display = 'flex';
 }
 
-// ============================================================
-// TOPIC LIST
-// ============================================================
-function addCustomTopic(name, done, revisit, where) {
-  const inputEl = document.getElementById('new-topic-input');
-  const topicName = name || (inputEl ? inputEl.value.trim() : '');
-  if (!topicName) return;
-  if (inputEl && !name) inputEl.value = '';
+window.onload = function () {
+  // Init NBME form select
+  const sel = document.getElementById('nbme-form-sel');
+  NBME_FORMS.forEach(f => sel.appendChild(new Option(f, f)));
 
-  const id = 'ct-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-  const item = document.createElement('div');
-  item.className = 'topic-card custom-topic-item';
-  item.innerHTML = `
-    <input type="checkbox" class="custom-topic-check" id="${id}-done" ${done ? 'checked' : ''}
-      onchange="toggleCustomTopicDone(this);schedSave()"
-      style="width:16px;height:16px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
-    <label for="${id}-done" class="custom-topic-name"
-      style="flex:1;font-size:14px;font-weight:500;cursor:pointer;${done ? 'text-decoration:line-through;opacity:0.45' : ''}">${topicName}</label>
-    <input class="custom-topic-where where-input" placeholder="Source" value="${where || ''}" oninput="schedSave()">
-    <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;cursor:pointer;white-space:nowrap">
-      <input type="checkbox" class="custom-topic-revisit" ${revisit ? 'checked' : ''}
-        onchange="schedSave()" style="width:13px;height:13px;accent-color:var(--gold);cursor:pointer">Revisit
-    </label>
-    <button onclick="confirmRemoveCustomTopic(this)"
-      style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;padding:2px 6px;line-height:1;border-radius:4px;transition:all .15s"
-      onmouseover="this.style.color='var(--red)';this.style.background='var(--red-light)'"
-      onmouseout="this.style.color='var(--muted)';this.style.background='none'"
-      title="Remove">×</button>
-  `;
-  document.getElementById('custom-topics-list').appendChild(item);
-  schedSave();
-}
+  // Populate focus topic selector
+  renderFocusSelector();
 
-function toggleCustomTopicDone(cb) {
-  const label = cb.closest('.custom-topic-item').querySelector('.custom-topic-name');
-  label.style.textDecoration = cb.checked ? 'line-through' : '';
-  label.style.opacity = cb.checked ? '0.45' : '1';
-  updateProgress();
-}
+  // Global keyboard shortcuts
+  document.addEventListener('keydown', globalKeyDown);
 
-function confirmRemoveCustomTopic(btn) {
-  if (confirm('Remove this topic?')) { btn.closest('.custom-topic-item').remove(); schedSave(); updateProgress(); }
-}
-
-// ============================================================
-// CUSTOM RESOURCES
-// ============================================================
-function addCustomResource(text, done) {
-  const inputEl = document.getElementById('new-resource-input');
-  const resText = text || (inputEl ? inputEl.value.trim() : '');
-  if (!resText) return;
-  if (inputEl && !text) inputEl.value = '';
-
-  const item = document.createElement('div');
-  item.className = 'resource-custom-item';
-  const id = 'cr-' + Date.now() + Math.random().toString(36).slice(2);
-  item.innerHTML = `
-    <input type="checkbox" class="res-check" id="${id}" ${done ? 'checked' : ''}
-      style="width:14px;height:14px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
-    <label for="${id}" class="res-label"
-      style="flex:1;font-size:13px;cursor:pointer;${done ? 'text-decoration:line-through;opacity:0.45' : ''}">${resText}</label>
-    <button onclick="confirmRemoveResource(this)"
-      style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:0 4px;border-radius:4px;transition:all .15s"
-      onmouseover="this.style.color='var(--red)'"
-      onmouseout="this.style.color='var(--muted)'"
-      title="Remove">×</button>
-  `;
-  item.querySelector('.res-check').addEventListener('change', function() {
-    const lbl = item.querySelector('.res-label');
-    lbl.style.textDecoration = this.checked ? 'line-through' : '';
-    lbl.style.opacity = this.checked ? '0.45' : '1';
-    schedSave();
+  // GAPI
+  gapi.load('client', async () => {
+    await gapi.client.init({
+      apiKey: typeof API_KEY !== 'undefined' ? API_KEY : '',
+      discoveryDocs: ['https://docs.googleapis.com/$discovery/rest?version=v1']
+    });
+    gapiReady = true;
+    if (googleReady) tryAutoSignIn();
   });
-  document.getElementById('custom-resources-list').appendChild(item);
-  schedSave();
+
+  // Google Identity Services
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: async (resp) => {
+      if (resp.error) { console.error(resp); return; }
+      accessToken = resp.access_token;
+      gapi.client.setToken({ access_token: accessToken });
+      document.getElementById('auth-screen').style.display = 'none';
+      document.getElementById('app').classList.add('visible');
+      await loadFromDrive();
+      renderAll();
+    }
+  });
+  googleReady = true;
+  if (gapiReady) tryAutoSignIn();
+};
+
+function tryAutoSignIn() {
+  tokenClient.requestAccessToken({ prompt:'none' });
 }
 
-function confirmRemoveResource(btn) {
-  if (confirm('Remove this item?')) { btn.closest('.resource-custom-item').remove(); schedSave(); }
-}
-
-// ============================================================
-// MISSED QUESTIONS
-// ============================================================
-function addMissedSession(title, rows) {
-  const container = document.getElementById('missed-sessions-container');
-  const sessId = 'sess-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-  const div = document.createElement('div');
-  div.className = 'missed-session';
-  div.id = sessId;
-  div.innerHTML = `
-    <div class="missed-session-header">
-      <div class="session-header-left">
-        <button class="missed-session-toggle" onclick="toggleMissedSession('${sessId}')">▾</button>
-        <input class="session-title-input" placeholder="Session name (e.g. NBME 9)" value="${title || ''}" oninput="schedSave()">
-      </div>
-      <button class="btn-ghost-red" onclick="confirmRemoveSession('${sessId}')">Remove</button>
-    </div>
-    <div class="missed-session-body" id="body-${sessId}">
-      <div class="missed-table-header">
-        <span>Topic</span><span>Why I Missed It</span><span>Correct Thinking</span><span></span>
-      </div>
-      <div class="missed-rows-container"></div>
-      <button class="add-row-btn" style="margin-top:10px" onclick="addMissedRow('${sessId}')">+ Add question</button>
-    </div>
-  `;
-  container.appendChild(div);
-
-  const rowsData = rows || [];
-  if (rowsData.length > 0) rowsData.forEach(r => addMissedRow(sessId, r));
-  else addMissedRow(sessId);
-}
-
-function addMissedRow(sessId, vals) {
-  const container = document.querySelector(`#body-${sessId} .missed-rows-container`);
-  const row = document.createElement('div');
-  row.className = 'missed-row';
-  row.innerHTML = `
-    <input class="missed-input" placeholder="e.g. SIADH vs CSW" value="${vals ? (vals[0] || '') : ''}" oninput="schedSave()">
-    <input class="missed-input" placeholder="e.g. Confused Na trend direction" value="${vals ? (vals[1] || '') : ''}" oninput="schedSave()">
-    <input class="missed-input" placeholder="e.g. SIADH Na rises with fluids…" value="${vals ? (vals[2] || '') : ''}" oninput="schedSave()">
-    <button onclick="this.closest('.missed-row').remove();schedSave();updateMissedCount()"
-      style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;padding:0 6px;line-height:1;border-radius:4px;transition:all .15s;flex-shrink:0"
-      onmouseover="this.style.color='var(--red)'"
-      onmouseout="this.style.color='var(--muted)'">×</button>
-  `;
-  container.appendChild(row);
-  updateMissedCount();
-}
-
-function toggleMissedSession(sessId) {
-  const body = document.getElementById('body-' + sessId);
-  const btn = document.querySelector(`#${sessId} .missed-session-toggle`);
-  const isHidden = body.style.display === 'none';
-  body.style.display = isHidden ? 'block' : 'none';
-  btn.textContent = isHidden ? '▾' : '▸';
-}
-
-function confirmRemoveSession(sessId) {
-  if (confirm('Remove this entire session and all its questions?')) {
-    document.getElementById(sessId).remove();
-    schedSave();
-    updateMissedCount();
-  }
-}
-
-function updateMissedCount() {
-  const count = document.querySelectorAll('.missed-row').length;
-  const el = document.getElementById('missed-count');
-  if (el) el.textContent = count + ' question' + (count !== 1 ? 's' : '') + ' logged';
-}
-
-// ============================================================
-// NOTES — with keyboard shortcut support
-// ============================================================
-function addNoteCard(name, content, existingId) {
-  const inputEl = document.getElementById('new-note-name');
-  const noteName = name || (inputEl ? inputEl.value.trim() : '') || 'New Note';
-  if (inputEl && !name) inputEl.value = '';
-
-  const id = existingId || ('note-' + Date.now() + '-' + Math.random().toString(36).slice(2));
-  const card = document.createElement('div');
-  card.className = 'note-card';
-  card.dataset.id = id;
-
-  card.innerHTML = `
-    <div class="note-card-header">
-      <span class="note-card-title" contenteditable="true" spellcheck="false" onblur="schedSave()">${noteName}</span>
-      <div class="note-card-actions">
-        <button class="note-action-btn" onclick="archiveNoteCard('${id}')">⊙ Archive</button>
-      </div>
-    </div>
-    <div class="note-toolbar" id="toolbar-${id}">
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('bold')" title="Bold (⌘B)"><b>B</b></button>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('italic')" title="Italic (⌘I)"><i>I</i></button>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('underline')" title="Underline (⌘U)"><u>U</u></button>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('strikeThrough')" title="Strikethrough" style="text-decoration:line-through">S</button>
-      <div class="toolbar-sep"></div>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('insertUnorderedList')" title="Bullet list">• List</button>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('insertOrderedList')" title="Numbered list">1. List</button>
-      <div class="toolbar-sep"></div>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('removeFormat')" title="Clear formatting" style="font-size:10px">Clear</button>
-      <div class="toolbar-sep"></div>
-      <span style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;padding:0 4px;align-self:center">Color:</span>
-      <button class="toolbar-color" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#111827')" title="Black" style="background:#111827"></button>
-      <button class="toolbar-color" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#D4A84B')" title="Gold" style="background:#D4A84B"></button>
-      <button class="toolbar-color" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#3B82F6')" title="Blue" style="background:#3B82F6"></button>
-      <button class="toolbar-color" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#059669')" title="Green" style="background:#059669"></button>
-      <button class="toolbar-color" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#DC2626')" title="Red" style="background:#DC2626"></button>
-    </div>
-    <div class="note-editor" contenteditable="true" spellcheck="true" placeholder="Start writing…"
-      oninput="schedSave()">${content || ''}</div>
-  `;
-
-  // Attach keyboard shortcut handler to the editor
-  const editor = card.querySelector('.note-editor');
-  editor.addEventListener('keydown', function(e) {
-    if (e.metaKey || e.ctrlKey) {
-      switch(e.key.toLowerCase()) {
-        case 'b': e.preventDefault(); document.execCommand('bold'); break;
-        case 'i': e.preventDefault(); document.execCommand('italic'); break;
-        case 'u': e.preventDefault(); document.execCommand('underline'); break;
-        case 'z': break; // allow undo
-        default: break;
+// ── Drive: Load ───────────────────────────────────────────
+async function loadFromDrive() {
+  try {
+    const doc = await gapi.client.docs.documents.get({ documentId: DOC_ID });
+    let text = '';
+    for (const el of (doc.result.body.content || [])) {
+      if (el.paragraph) {
+        for (const run of (el.paragraph.elements || [])) {
+          if (run.textRun) text += run.textRun.content;
+        }
       }
     }
-    // Tab → indent
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;');
+    const trimmed = text.trim();
+    if (trimmed) {
+      const loaded = JSON.parse(trimmed);
+      // Merge preserving all keys (backward compat)
+      state = Object.assign({}, state, loaded);
+      // Ensure todayFocus exists
+      if (!state.todayFocus) state.todayFocus = { date:'', items:[] };
+      // Ensure customTopics exists
+      if (!state.customTopics) state.customTopics = [];
+      // Merge any new base topics not in saved state
+      TOPICS.forEach(t => { if (!(t in state.topics)) state.topics[t] = false; });
     }
-  });
-
-  document.getElementById('notes-sections').appendChild(card);
+  } catch(e) { console.warn('Load error:', e); }
 }
 
-function archiveNoteCard(id) {
-  const card = document.querySelector(`.note-card[data-id="${id}"]`);
-  if (!card) return;
-  const name = card.querySelector('.note-card-title').textContent;
-  const content = card.querySelector('.note-editor').innerHTML;
-  card.remove();
-  addArchiveItem(name, content);
-  schedSave();
+// ── Drive: Save ───────────────────────────────────────────
+function scheduleSave() {
+  setSaveDot('saving');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveToDrive, 1400);
 }
 
-// ============================================================
-// ARCHIVES (modal)
-// ============================================================
-function addArchiveItem(name, content) {
-  const list = document.getElementById('archive-list');
-  const item = document.createElement('div');
-  item.className = 'archive-item';
-  item.dataset.name = name;
-  item.dataset.content = content;
-  item.innerHTML = `
-    <div class="archive-item-header">
-      <span class="archive-item-name">${name}</span>
-      <div style="display:flex;gap:8px">
-        <button class="btn-ghost-blue" onclick="unarchiveItem(this)">Restore</button>
-        <button class="btn-ghost-red" onclick="confirmDeleteArchive(this)">Delete</button>
-      </div>
-    </div>
-    <div class="archive-preview">${(content || '').replace(/<[^>]+>/g, ' ').trim().slice(0, 140)}${(content || '').length > 140 ? '…' : ''}</div>
-  `;
-  list.appendChild(item);
-  updateArchiveCount();
-}
-
-function unarchiveItem(btn) {
-  const item = btn.closest('.archive-item');
-  addNoteCard(item.dataset.name, item.dataset.content);
-  item.remove();
-  updateArchiveCount();
-  schedSave();
-  closeArchiveModal();
-}
-
-function confirmDeleteArchive(btn) {
-  if (confirm('Permanently delete this archived note? This cannot be undone.')) {
-    btn.closest('.archive-item').remove();
-    updateArchiveCount();
-    schedSave();
+async function saveToDrive() {
+  if (!accessToken) return;
+  try {
+    const doc = await gapi.client.docs.documents.get({ documentId: DOC_ID });
+    const lastIndex = doc.result.body.content.reduce((m, el) => el.endIndex ? Math.max(m, el.endIndex) : m, 1);
+    const requests = [];
+    if (lastIndex > 1) requests.push({ deleteContentRange:{ range:{ startIndex:1, endIndex:lastIndex-1 }}});
+    requests.push({ insertText:{ location:{ index:1 }, text: JSON.stringify(state) }});
+    await gapi.client.docs.documents.batchUpdate({ documentId: DOC_ID, resource:{ requests }});
+    setSaveDot('saved');
+    document.getElementById('save-lbl').textContent = 'Saved ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  } catch(e) {
+    console.error('Save error:', e);
+    setSaveDot('error');
   }
 }
 
-function updateArchiveCount() {
-  const count = document.querySelectorAll('#archive-list > .archive-item').length;
-  const badge = document.getElementById('archive-count-badge');
-  if (badge) { badge.textContent = count > 0 ? count : ''; badge.style.display = count > 0 ? 'inline-flex' : 'none'; }
-  const modalEmpty = document.getElementById('archive-modal-empty');
-  if (modalEmpty) modalEmpty.style.display = count > 0 ? 'none' : 'block';
+function setSaveDot(state) {
+  const dot = document.getElementById('save-dot');
+  dot.className = '';
+  if (state === 'saving') { dot.classList.add('saving'); document.getElementById('save-lbl').textContent = 'Saving…'; }
+  else if (state === 'saved') { dot.classList.add('saved'); }
 }
 
-function openArchiveModal() { document.getElementById('archive-modal').classList.add('open'); }
-function closeArchiveModal() { document.getElementById('archive-modal').classList.remove('open'); }
+// ── Render All ────────────────────────────────────────────
+function renderAll() {
+  updateCountdown();
+  renderFocusPanel();
+  renderHeatmap();
+  renderChart();
+  renderTopics();
+  renderResources();
+  renderNBME();
+  renderCMS();
+  renderMissedSessions();
+  renderNotes();
+  renderFocusSelector();
+  setInterval(updateCountdown, 60000);
+}
 
-// ============================================================
-// SHELF CHART + COUNTDOWN
-// ============================================================
-function initShelfChart() {
-  // Timezone-safe countdown: compare midnight-to-midnight local
-  const today = new Date(); today.setHours(0,0,0,0);
-  const cssTarget = new Date('2026-06-12T00:00:00'); cssTarget.setHours(0,0,0,0);
-  const stepTarget = new Date('2026-08-12T00:00:00'); stepTarget.setHours(0,0,0,0);
-  const cssDays = Math.max(0, Math.round((cssTarget - today) / 86400000));
-  const stepDays = Math.max(0, Math.round((stepTarget - today) / 86400000));
+// ── Tab Navigation ─────────────────────────────────────── 
+function showTab(tab) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('btn-' + tab).classList.add('active');
+}
 
-  const cssEl = document.getElementById('home-css-days');
-  const stepEl = document.getElementById('home-step-days');
-  if (cssEl) cssEl.textContent = cssDays;
-  if (stepEl) stepEl.textContent = stepDays;
+// ── Global Key Shortcuts ──────────────────────────────────
+function globalKeyDown(e) {
+  const isMeta = e.metaKey || e.ctrlKey;
+  // ⌘1-5 tab switching
+  if (isMeta && !e.shiftKey && !e.altKey) {
+    const tabs = ['dashboard','topics','assessments','missed','notes'];
+    const n = parseInt(e.key) - 1;
+    if (n >= 0 && n < tabs.length) { e.preventDefault(); showTab(tabs[n]); return; }
+    // ⌘K command palette
+    if (e.key === 'k') { e.preventDefault(); openCmdPalette(); return; }
+  }
+  // ESC
+  if (e.key === 'Escape') {
+    closeCmdPalette();
+    closeArchiveModal();
+    confirmResolve(false);
+  }
+}
 
-  // Urgency color on low days
-  if (cssEl && cssDays <= 14) cssEl.style.color = cssDays <= 7 ? '#EF4444' : '#F59E0B';
-  if (stepEl && stepDays <= 14) stepEl.style.color = stepDays <= 7 ? '#EF4444' : '#F59E0B';
+// ── Countdown ─────────────────────────────────────────────
+function daysUntil(dateStr) {
+  const now   = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tgt   = new Date(dateStr + 'T00:00:00');
+  return Math.max(0, Math.ceil((tgt - today) / 86400000));
+}
 
-  const labels = SHELF_SCORES.map(s => s.label);
-  const scores = SHELF_SCORES.map(s => s.score);
-  const avgLine = scores.map((_, i) => {
-    const slice = scores.slice(0, i + 1);
-    return Math.round(slice.reduce((a, b) => a + b, 0) / slice.length * 10) / 10;
-  });
+function updateCountdown() {
+  const cssD  = daysUntil(CSSE_DATE);
+  const stepD = daysUntil(STEP2_DATE);
 
-  const ctx = document.getElementById('shelf-chart').getContext('2d');
-  if (shelfChartInstance) shelfChartInstance.destroy();
+  const cssEl  = document.getElementById('css-days');
+  const stepEl = document.getElementById('step-days');
+  const cssCard  = document.getElementById('csse-card');
+  const stepCard = document.getElementById('step-card');
 
-  shelfChartInstance = new Chart(ctx, {
+  if (cssEl)  cssEl.textContent  = cssD;
+  if (stepEl) stepEl.textContent = stepD;
+
+  function urgency(card, days) {
+    if (!card) return;
+    card.classList.remove('warn','urgent');
+    if (days < 7)  card.classList.add('urgent');
+    else if (days < 14) card.classList.add('warn');
+  }
+  urgency(cssCard,  cssD);
+  urgency(stepCard, stepD);
+}
+
+// ── Chart ─────────────────────────────────────────────────
+let shelfChart = null;
+function renderChart() {
+  const ctx = document.getElementById('shelf-chart');
+  if (!ctx) return;
+
+  // Combine shelf + NBME scores for chart
+  const allPoints = [
+    ...SHELF_SCORES,
+    ...(state.nbmeScores || []).map(s => ({ date: s.date, label: s.form, score: s.score }))
+  ].sort((a,b) => new Date(a.date) - new Date(b.date));
+
+  const labels  = allPoints.map(p => p.label);
+  const scores  = allPoints.map(p => p.score);
+  const colors  = scores.map(s => s >= GOAL_SCORE ? '#5B8A5B' : s >= 80 ? '#C9913A' : '#CC5028');
+  const goalArr = allPoints.map(() => GOAL_SCORE);
+
+  if (shelfChart) { shelfChart.destroy(); shelfChart = null; }
+
+  Chart.defaults.color = '#584F3C';
+  Chart.defaults.font.family = "'JetBrains Mono', monospace";
+  Chart.defaults.font.size = 11;
+
+  shelfChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels,
       datasets: [
         {
-          label: 'EPC / % Score',
+          label: 'Score',
           data: scores,
-          borderColor: '#D4A84B',
-          backgroundColor: (ctx) => {
-            const chart = ctx.chart;
-            const {ctx: c, chartArea} = chart;
-            if (!chartArea) return 'transparent';
-            const gradient = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-            gradient.addColorStop(0, 'rgba(212,168,75,0.25)');
-            gradient.addColorStop(1, 'rgba(212,168,75,0)');
-            return gradient;
-          },
-          pointBackgroundColor: scores.map(s => s >= 90 ? '#10B981' : s >= 85 ? '#D4A84B' : s >= 80 ? '#3B82F6' : '#EF4444'),
-          pointBorderColor: '#fff',
-          pointBorderWidth: 2,
-          pointRadius: 7,
-          pointHoverRadius: 11,
-          tension: 0.4,
-          fill: true,
-          order: 2,
+          borderColor: '#C9913A',
+          backgroundColor: 'transparent',
+          pointBackgroundColor: colors,
+          pointBorderColor: colors,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          borderWidth: 1.5,
+          tension: 0.2,
         },
         {
-          label: 'Running Avg',
-          data: avgLine,
-          borderColor: 'rgba(255,255,255,0.3)',
-          borderDash: [6, 4],
-          borderWidth: 2,
+          label: 'Goal',
+          data: goalArr,
+          borderColor: 'rgba(71,121,163,.5)',
+          backgroundColor: 'transparent',
           pointRadius: 0,
-          tension: 0.4,
-          fill: false,
-          order: 1,
+          borderWidth: 1,
+          borderDash: [4, 4],
         }
       ]
     },
     options: {
       responsive: true,
-      interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: {
-          labels: { font: { family: "'DM Mono', monospace", size: 11 }, color: 'rgba(255,255,255,0.45)', boxWidth: 20, padding: 16 }
-        },
+        legend: { display: false },
         tooltip: {
-          backgroundColor: 'rgba(10,18,35,0.97)',
-          titleColor: '#D4A84B',
-          bodyColor: 'rgba(255,255,255,0.85)',
-          borderColor: 'rgba(212,168,75,0.25)',
+          backgroundColor: '#1A1710',
+          borderColor: '#2C2820',
           borderWidth: 1,
-          padding: 10,
+          titleColor: '#EEE6CE',
+          bodyColor: '#9B9078',
           callbacks: {
-            label: ctx => `  ${ctx.dataset.label}: ${ctx.parsed.y}%`,
-            afterLabel: ctx => {
-              if (ctx.datasetIndex === 0) {
-                const s = ctx.parsed.y;
-                return s >= 90 ? '  ✦ Excellent' : s >= 85 ? '  ✓ Strong' : s >= 80 ? '  → On target' : '  ↓ Needs work';
-              }
-              return '';
-            }
+            label: ctx => ' Score: ' + ctx.parsed.y
           }
         }
       },
       scales: {
-        y: {
-          min: 65, max: 100,
-          ticks: { font: { family: "'DM Mono', monospace", size: 11 }, color: 'rgba(255,255,255,0.35)', callback: v => v + '%', stepSize: 5 },
-          grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
-        },
         x: {
-          ticks: { font: { family: "'DM Mono', monospace", size: 10 }, color: 'rgba(255,255,255,0.35)', maxRotation: 40 },
-          grid: { display: false }
+          grid: { color: '#2C2820', drawBorder: false },
+          ticks: { color: '#584F3C', maxRotation: 30 }
+        },
+        y: {
+          grid: { color: '#2C2820', drawBorder: false },
+          ticks: { color: '#584F3C' },
+          min: Math.max(0, Math.min(...scores) - 10),
+          max: Math.min(100, Math.max(...scores, GOAL_SCORE) + 5),
         }
       }
     }
   });
 }
 
-// ============================================================
-// UI HELPERS
-// ============================================================
-function setSyncBadge(type, text) {
-  const b = document.getElementById('sync-badge');
-  b.className = 'sync-status sync-' + type;
-  b.textContent = (type === 'ok' ? '● ' : type === 'saving' ? '◌ ' : '✕ ') + text;
+// ── Today's Focus ─────────────────────────────────────────
+function renderFocusSelector() {
+  const sel = document.getElementById('focus-sel');
+  if (!sel) return;
+  const current = sel.value;
+  while (sel.options.length > 1) sel.remove(1);
+  const allTopics = [...TOPICS, ...(state.customTopics || [])];
+  allTopics.forEach(t => sel.appendChild(new Option(t, t)));
+  sel.value = current;
 }
 
-function showTab(t, el) {
-  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(e => e.classList.remove('active'));
-  document.getElementById('tab-' + t).classList.add('active');
-  el.classList.add('active');
-}
+function renderFocusPanel() {
+  const today = new Date().toISOString().slice(0,10);
+  const lbl   = document.getElementById('focus-date-lbl');
+  if (lbl) lbl.textContent = new Date().toLocaleDateString([], {month:'short', day:'numeric'});
 
-function updateProgress() {
-  const builtIn = TOPICS.filter(id => document.getElementById('vis-' + id)?.checked).length;
-  const customDone = document.querySelectorAll('.custom-topic-check:checked').length;
-  const customTotal = document.querySelectorAll('.custom-topic-check').length;
-  const done = builtIn + customDone;
-  const total = TOPICS.length + customTotal;
-  const pct = total ? Math.round(done / total * 100) : 0;
-  const el = document.getElementById('prog-text');
-  if (el) el.textContent = done + ' / ' + total + ' topics done · ' + pct + '%';
-  const fill = document.getElementById('prog-fill');
-  if (fill) fill.style.width = pct + '%';
-  // Update dashboard mini-stat if exists
-  const dash = document.getElementById('dash-topics-done');
-  if (dash) dash.textContent = done + ' / ' + total;
-}
+  // Auto-reset if new day
+  if (state.todayFocus.date !== today) {
+    state.todayFocus = { date: today, items: [] };
+  }
 
-function markDone(id) {
-  const card = document.getElementById('card-' + id);
-  if (card) card.classList.toggle('done', document.getElementById('vis-' + id).checked);
-  updateProgress();
-}
+  const container = document.getElementById('focus-items');
+  if (!container) return;
+  container.innerHTML = '';
 
-function buildNbmeGrid() {
-  const grid = document.getElementById('nbme-grid');
-  NBME_FORMS.forEach((f, i) => {
-    const id = 'nbme-' + i;
-    const card = document.createElement('div');
-    card.className = 'exam-card';
-    card.id = 'ec-' + id;
-    card.innerHTML = `<input type="checkbox" id="${id}" onchange="toggleExam('${id}');schedSave()"><label for="${id}">${f}</label>`;
-    grid.appendChild(card);
+  if (!state.todayFocus.items.length) {
+    container.innerHTML = '<div style="font-family:var(--font-mono);font-size:.72rem;color:var(--text-tertiary);padding:.3rem 0">No topics added yet</div>';
+    return;
+  }
+
+  state.todayFocus.items.forEach((item, i) => {
+    const div = document.createElement('div');
+    div.className = 'focus-item' + (item.done ? ' done' : '');
+    div.onclick = () => toggleFocusItem(i);
+    div.innerHTML = `
+      <div class="f-check">${item.done ? '✓' : ''}</div>
+      <div class="f-lbl">${item.topic}</div>
+      <button onclick="event.stopPropagation();removeFocusItem(${i})" style="background:transparent;border:none;color:var(--text-tertiary);font-size:.8rem;cursor:pointer;padding:0 3px;transition:color .15s" onmouseover="this.style.color='var(--urgent)'" onmouseout="this.style.color='var(--text-tertiary)'">×</button>
+    `;
+    container.appendChild(div);
   });
 }
 
-function toggleExam(id) {
-  document.getElementById('ec-' + id).classList.toggle('done', document.getElementById(id).checked);
+function addFocusTopic() {
+  const sel = document.getElementById('focus-sel');
+  const topic = sel.value;
+  if (!topic) return;
+  const today = new Date().toISOString().slice(0,10);
+  if (state.todayFocus.date !== today) state.todayFocus = { date: today, items: [] };
+  if (state.todayFocus.items.find(i => i.topic === topic)) { sel.value = ''; return; }
+  state.todayFocus.items.push({ topic, done: false });
+  sel.value = '';
+  renderFocusPanel();
+  scheduleSave();
+}
+
+function toggleFocusItem(i) {
+  state.todayFocus.items[i].done = !state.todayFocus.items[i].done;
+  renderFocusPanel();
+  scheduleSave();
+}
+
+function removeFocusItem(i) {
+  state.todayFocus.items.splice(i, 1);
+  renderFocusPanel();
+  scheduleSave();
+}
+
+// ── Heatmap ───────────────────────────────────────────────
+function renderHeatmap() {
+  const container = document.getElementById('heat-pills');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const allTopics = [...TOPICS, ...(state.customTopics || [])];
+  const counts = {};
+  allTopics.forEach(t => counts[t] = 0);
+
+  (state.missedSessions || []).forEach(sess => {
+    (sess.entries || []).forEach(e => {
+      const t = (e.topic || '').toLowerCase().trim();
+      if (t in counts) counts[t]++;
+      else counts[t] = (counts[t] || 0) + 1;
+    });
+  });
+
+  allTopics.forEach(topic => {
+    const n = counts[topic] || 0;
+    const level = n === 0 ? 0 : n <= 2 ? 1 : n <= 5 ? 2 : 3;
+    const pill = document.createElement('div');
+    pill.className = 'heat-pill heat-' + level;
+    pill.textContent = topic;
+    pill.title = n + ' missed question' + (n !== 1 ? 's' : '');
+    container.appendChild(pill);
+  });
+}
+
+// ── Progress Ring ─────────────────────────────────────────
+function updateRing() {
+  const allTopics = [...TOPICS, ...(state.customTopics || [])];
+  const done = allTopics.filter(t => state.topics[t]).length;
+  const total = allTopics.length;
+  const pct = total ? done / total : 0;
+  const circ = 144.5; // 2π × 23
+  const offset = circ - pct * circ;
+
+  const arc = document.getElementById('ring-arc');
+  const frac = document.getElementById('ring-frac');
+  const rpct = document.getElementById('ring-pct');
+  if (arc)  arc.setAttribute('stroke-dashoffset', offset.toFixed(1));
+  if (frac) frac.textContent = done + ' / ' + total;
+  if (rpct) rpct.textContent = Math.round(pct * 100) + '% done';
+}
+
+// ── Topics ────────────────────────────────────────────────
+function renderTopics() {
+  const container = document.getElementById('topics-list');
+  if (!container) return;
+  container.innerHTML = '';
+  const allTopics = [...TOPICS, ...(state.customTopics || [])];
+  allTopics.forEach(topic => {
+    const done = !!state.topics[topic];
+    const row  = document.createElement('div');
+    row.className = 'topic-row' + (done ? ' done' : '');
+    row.innerHTML = `
+      <div class="t-check">${done ? '✓' : ''}</div>
+      <div class="topic-name">${topic}</div>
+      ${!TOPICS.includes(topic) ? `<button class="topic-del" onclick="event.stopPropagation();removeCustomTopic('${topic}')" title="Remove">×</button>` : ''}
+    `;
+    row.onclick = () => toggleTopic(topic);
+    container.appendChild(row);
+  });
+  updateRing();
+}
+
+function toggleTopic(topic) {
+  state.topics[topic] = !state.topics[topic];
+  renderTopics();
+  renderHeatmap();
+  scheduleSave();
+}
+
+function addCustomTopic() {
+  const inp = document.getElementById('new-topic-inp');
+  const val = inp.value.trim().toLowerCase();
+  if (!val) return;
+  if (!state.customTopics) state.customTopics = [];
+  if ([...TOPICS, ...state.customTopics].includes(val)) { inp.value=''; return; }
+  state.customTopics.push(val);
+  if (!(val in state.topics)) state.topics[val] = false;
+  inp.value = '';
+  renderTopics();
+  renderFocusSelector();
+  scheduleSave();
+}
+
+async function removeCustomTopic(topic) {
+  const ok = await confirm2('Remove topic "' + topic + '"? This cannot be undone.');
+  if (!ok) return;
+  state.customTopics = state.customTopics.filter(t => t !== topic);
+  delete state.topics[topic];
+  renderTopics();
+  renderFocusSelector();
+  scheduleSave();
+}
+
+// ── Resources ─────────────────────────────────────────────
+function renderResources() {
+  const container = document.getElementById('res-list');
+  if (!container) return;
+  container.innerHTML = '';
+  (state.resources || []).forEach((res, i) => {
+    const div = document.createElement('div');
+    div.className = 'resource-item';
+    div.innerHTML = `<div class="res-name">${res}</div><button class="res-del" onclick="removeResource(${i})" title="Remove">×</button>`;
+    container.appendChild(div);
+  });
+}
+
+function addResource() {
+  const inp = document.getElementById('new-res-inp');
+  const val = inp.value.trim();
+  if (!val) return;
+  if (!state.resources) state.resources = [];
+  state.resources.push(val);
+  inp.value = '';
+  renderResources();
+  scheduleSave();
+}
+
+async function removeResource(i) {
+  const ok = await confirm2('Remove "' + state.resources[i] + '"?');
+  if (!ok) return;
+  state.resources.splice(i, 1);
+  renderResources();
+  scheduleSave();
+}
+
+// ── NBME Assessments ──────────────────────────────────────
+function renderNBME() {
+  const container = document.getElementById('nbme-list');
+  if (!container) return;
+  container.innerHTML = '';
+  (state.nbmeScores || []).forEach((s, i) => {
+    const div = document.createElement('div');
+    div.className = 'assess-entry';
+    const scoreClass = s.score >= 260 ? 'tag-green' : s.score >= 240 ? 'tag-amber' : 'tag-red';
+    div.innerHTML = `
+      <div class="ae-name">${s.form}</div>
+      <span class="tag ${scoreClass}">${s.score}</span>
+      <div class="ae-date">${s.date || ''}</div>
+      <button class="ae-del" onclick="removeNBME(${i})" title="Remove">×</button>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function addNBMEScore() {
+  const form  = document.getElementById('nbme-form-sel').value;
+  const score = parseInt(document.getElementById('nbme-score-inp').value);
+  const date  = document.getElementById('nbme-date-inp').value;
+  if (!form || isNaN(score)) return;
+  if (!state.nbmeScores) state.nbmeScores = [];
+  state.nbmeScores.push({ form, score, date });
+  state.nbmeScores.sort((a,b) => (a.date || '') < (b.date || '') ? -1 : 1);
+  document.getElementById('nbme-form-sel').value = '';
+  document.getElementById('nbme-score-inp').value = '';
+  document.getElementById('nbme-date-inp').value = '';
+  renderNBME();
+  renderChart();
+  scheduleSave();
+}
+
+async function removeNBME(i) {
+  const ok = await confirm2('Remove this NBME score?');
+  if (!ok) return;
+  state.nbmeScores.splice(i, 1);
+  renderNBME();
+  renderChart();
+  scheduleSave();
+}
+
+// ── CMS / Other ────────────────────────────────────────────
+function renderCMS() {
+  const container = document.getElementById('cms-list');
+  if (!container) return;
+  container.innerHTML = '';
+  (state.cmsScores || []).forEach((s, i) => {
+    const div = document.createElement('div');
+    div.className = 'assess-entry';
+    div.innerHTML = `
+      <div class="ae-name">${s.name}</div>
+      <div class="ae-score">${s.score}</div>
+      <div class="ae-date">${s.date || ''}</div>
+      <button class="ae-del" onclick="removeCMS(${i})" title="Remove">×</button>
+    `;
+    container.appendChild(div);
+  });
+}
+
+function addCMSScore() {
+  const name  = document.getElementById('cms-name-inp').value.trim();
+  const score = parseFloat(document.getElementById('cms-score-inp').value);
+  const date  = document.getElementById('cms-date-inp').value;
+  if (!name || isNaN(score)) return;
+  if (!state.cmsScores) state.cmsScores = [];
+  state.cmsScores.push({ name, score, date });
+  document.getElementById('cms-name-inp').value = '';
+  document.getElementById('cms-score-inp').value = '';
+  document.getElementById('cms-date-inp').value = '';
+  renderCMS();
+  scheduleSave();
+}
+
+async function removeCMS(i) {
+  const ok = await confirm2('Remove this score?');
+  if (!ok) return;
+  state.cmsScores.splice(i, 1);
+  renderCMS();
+  scheduleSave();
+}
+
+// ── Missed Questions ──────────────────────────────────────
+function renderMissedSessions() {
+  const container = document.getElementById('sessions-container');
+  if (!container) return;
+  container.innerHTML = '';
+  let total = 0;
+  (state.missedSessions || []).forEach((sess, si) => {
+    total += (sess.entries || []).length;
+    const block = document.createElement('div');
+    block.className = 'session-block';
+    block.id = 'sess-' + si;
+    const isOpen = !!sess.open;
+    block.innerHTML = `
+      <div class="session-hdr ${isOpen?'open':''}" onclick="toggleSession(${si})">
+        <div class="sess-title">${sess.title || 'Session ' + (si+1)}</div>
+        <div class="sess-right">
+          <span class="tag tag-ghost">${(sess.entries||[]).length} missed</span>
+          <span class="sess-toggle">▾</span>
+        </div>
+      </div>
+      <div class="session-body ${isOpen?'open':''}" id="sess-body-${si}">
+        ${renderEntriesHTML(si, sess.entries || [])}
+        <div class="mq-add-btn-row">
+          <button class="btn btn-ghost btn-sm" onclick="addMissedEntry(${si})">+ Add question</button>
+          <button class="btn btn-danger btn-sm" style="margin-left:6px" onclick="removeSession(${si})">Remove session</button>
+        </div>
+      </div>
+    `;
+    container.appendChild(block);
+  });
+  const lbl = document.getElementById('missed-total-lbl');
+  if (lbl) lbl.textContent = total + ' total missed';
+}
+
+function renderEntriesHTML(si, entries) {
+  if (!entries.length) return '<div style="padding:.6rem 1.1rem;font-family:var(--font-mono);font-size:.72rem;color:var(--text-tertiary)">No entries yet</div>';
+  return entries.map((e, ei) => `
+    <div class="mq-entry">
+      <div class="mq-topic-row">
+        <span class="mq-topic">${e.topic || ''}</span>
+        <span class="tag tag-ghost" style="font-size:.58rem">${(e.topic||'').toUpperCase()}</span>
+        <button onclick="removeMissedEntry(${si},${ei})" style="margin-left:auto;background:transparent;border:none;color:var(--text-tertiary);font-size:.8rem;cursor:pointer;transition:color .15s" onmouseover="this.style.color='var(--urgent)'" onmouseout="this.style.color='var(--text-tertiary)'">×</button>
+      </div>
+      <div class="mq-field">Why missed</div>
+      <div class="mq-val">${e.why || '<em style="color:var(--text-tertiary)">Not filled in</em>'}</div>
+      <div class="mq-correct-box">
+        <div class="mq-field">Correct thinking</div>
+        <div class="mq-val">${e.correct || '<em style="color:var(--text-tertiary)">Not filled in</em>'}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleSession(i) {
+  state.missedSessions[i].open = !state.missedSessions[i].open;
+  renderMissedSessions();
+}
+
+function addMissedSession() {
+  const title = prompt('Session title (e.g. NBME 16, UWorld Block 3):');
+  if (title === null) return;
+  if (!state.missedSessions) state.missedSessions = [];
+  state.missedSessions.push({ title: title || 'Session', entries: [], open: true });
+  renderMissedSessions();
+  scheduleSave();
+}
+
+async function removeSession(i) {
+  const ok = await confirm2('Remove session "' + state.missedSessions[i].title + '" and all its entries?');
+  if (!ok) return;
+  state.missedSessions.splice(i, 1);
+  renderMissedSessions();
+  renderHeatmap();
+  scheduleSave();
+}
+
+function addMissedEntry(si) {
+  const topic   = prompt('Topic (e.g. cardio, cns):');
+  if (topic === null) return;
+  const why     = prompt('Why did you miss it?');
+  if (why === null) return;
+  const correct = prompt('Correct thinking / what to remember:');
+  if (correct === null) return;
+  if (!state.missedSessions[si].entries) state.missedSessions[si].entries = [];
+  state.missedSessions[si].entries.push({ topic: topic.trim(), why, correct });
+  renderMissedSessions();
+  renderHeatmap();
+  scheduleSave();
+}
+
+async function removeMissedEntry(si, ei) {
+  const ok = await confirm2('Remove this missed question entry?');
+  if (!ok) return;
+  state.missedSessions[si].entries.splice(ei, 1);
+  renderMissedSessions();
+  renderHeatmap();
+  scheduleSave();
+}
+
+// ── Notes ──────────────────────────────────────────────────
+function renderNotes() {
+  const container = document.getElementById('notes-container');
+  if (!container) return;
+  container.innerHTML = '';
+  const badge = document.getElementById('arch-badge');
+  const archCount = (state.archivedNotes || []).length;
+  if (badge) { badge.textContent = archCount; badge.style.display = archCount ? 'inline-flex' : 'none'; }
+  if (!(state.notes || []).length) {
+    container.innerHTML = '<div style="font-family:var(--font-mono);font-size:.78rem;color:var(--text-tertiary);padding:1rem 0">No notes yet. Click + New Note to start.</div>';
+    return;
+  }
+  state.notes.forEach((note, i) => {
+    const card = buildNoteCard(note, i);
+    container.appendChild(card);
+  });
+}
+
+function buildNoteCard(note, i) {
+  const card = document.createElement('div');
+  card.className = 'note-card';
+  card.id = 'note-' + i;
+  card.innerHTML = `
+    <div class="note-hdr">
+      <div class="note-dot saved" id="ndot-${i}"></div>
+      <input class="note-title-inp" placeholder="Note title…" value="${escH(note.title||'')}"
+        oninput="noteFieldChange(${i},'title',this.value)">
+      <div class="note-acts">
+        <button class="btn btn-ghost btn-xs" onclick="archiveNote(${i})">Archive</button>
+        <button class="btn btn-danger btn-xs" onclick="deleteNote(${i})">Delete</button>
+      </div>
+    </div>
+    <div class="note-tb">
+      <button class="fmt-btn" onclick="fmtNote(${i},'bold')"><b>B</b></button>
+      <button class="fmt-btn" onclick="fmtNote(${i},'italic')"><i>I</i></button>
+      <button class="fmt-btn" onclick="fmtNote(${i},'underline')"><u>U</u></button>
+      <button class="fmt-btn" onclick="fmtNote(${i},'strikeThrough')"><s>S</s></button>
+      <div class="tb-sep"></div>
+      <button class="fmt-btn" onclick="fmtNote(${i},'insertUnorderedList')">• List</button>
+      <button class="fmt-btn" onclick="fmtNote(${i},'insertOrderedList')">1. List</button>
+      <div class="tb-sep"></div>
+      <div class="clr-dot" style="background:#EEE6CE" onclick="fmtNoteColor(${i},'#EEE6CE')" title="Default"></div>
+      <div class="clr-dot" style="background:#E4AA56" onclick="fmtNoteColor(${i},'#E4AA56')" title="Amber"></div>
+      <div class="clr-dot" style="background:#6EA8D4" onclick="fmtNoteColor(${i},'#6EA8D4')" title="Blue"></div>
+      <div class="clr-dot" style="background:#7DB87D" onclick="fmtNoteColor(${i},'#7DB87D')" title="Green"></div>
+      <div class="clr-dot" style="background:#E07060" onclick="fmtNoteColor(${i},'#E07060')" title="Red"></div>
+    </div>
+    <div class="note-editor" id="editor-${i}" contenteditable="true" placeholder="Start writing…"
+      onkeydown="noteKeyDown(event,${i})"
+      oninput="noteFieldChange(${i},'body',document.getElementById('editor-${i}').innerHTML)">${note.body||''}</div>
+  `;
+  return card;
+}
+
+function addNote() {
+  if (!state.notes) state.notes = [];
+  state.notes.unshift({ title: '', body: '', created: Date.now() });
+  renderNotes();
+  // Focus title
+  const firstInp = document.querySelector('.note-title-inp');
+  if (firstInp) firstInp.focus();
+  scheduleSave();
+}
+
+function noteFieldChange(i, field, val) {
+  if (!state.notes[i]) return;
+  state.notes[i][field] = val;
+  const dot = document.getElementById('ndot-' + i);
+  if (dot) dot.className = 'note-dot saving';
+  scheduleSave();
+  setTimeout(() => { const d = document.getElementById('ndot-' + i); if (d) d.className = 'note-dot saved'; }, 1600);
+}
+
+function noteKeyDown(e, i) {
+  const isMeta = e.metaKey || e.ctrlKey;
+  if (!isMeta) return;
+  const cmds = { b:'bold', i:'italic', u:'underline' };
+  if (cmds[e.key]) { e.preventDefault(); fmtNote(i, cmds[e.key]); }
+}
+
+function fmtNote(i, cmd) {
+  const ed = document.getElementById('editor-' + i);
+  if (!ed) return;
+  ed.focus();
+  document.execCommand(cmd, false, null);
+  noteFieldChange(i, 'body', ed.innerHTML);
+}
+
+function fmtNoteColor(i, color) {
+  const ed = document.getElementById('editor-' + i);
+  if (!ed) return;
+  ed.focus();
+  document.execCommand('foreColor', false, color);
+  noteFieldChange(i, 'body', ed.innerHTML);
+}
+
+async function deleteNote(i) {
+  const ok = await confirm2('Delete this note permanently?');
+  if (!ok) return;
+  state.notes.splice(i, 1);
+  renderNotes();
+  scheduleSave();
+}
+
+function archiveNote(i) {
+  if (!state.archivedNotes) state.archivedNotes = [];
+  state.archivedNotes.push({ ...state.notes[i], archivedAt: Date.now() });
+  state.notes.splice(i, 1);
+  renderNotes();
+  scheduleSave();
+}
+
+// ── Archive Modal ─────────────────────────────────────────
+function openArchiveModal() {
+  const modal = document.getElementById('arch-modal');
+  if (!modal) return;
+  const list  = document.getElementById('arch-list');
+  const empty = document.getElementById('arch-empty');
+  list.innerHTML = '';
+  const arcs = state.archivedNotes || [];
+  empty.style.display = arcs.length ? 'none' : 'block';
+  arcs.forEach((note, i) => {
+    const item = document.createElement('div');
+    item.className = 'arch-note-item';
+    item.innerHTML = `
+      <div class="arch-note-title">${escH(note.title || 'Untitled')}</div>
+      <div style="font-size:.78rem;color:var(--text-tertiary);font-family:var(--font-mono);margin-bottom:.3rem">${new Date(note.archivedAt||0).toLocaleDateString()}</div>
+      <div class="arch-note-acts">
+        <button class="btn btn-ghost btn-xs" onclick="restoreNote(${i})">Restore</button>
+        <button class="btn btn-danger btn-xs" onclick="deleteArchivedNote(${i})">Delete</button>
+      </div>
+    `;
+    list.appendChild(item);
+  });
+  modal.classList.add('open');
+}
+
+function closeArchiveModal() {
+  const m = document.getElementById('arch-modal');
+  if (m) m.classList.remove('open');
+}
+
+function restoreNote(i) {
+  if (!state.notes) state.notes = [];
+  const note = state.archivedNotes.splice(i, 1)[0];
+  delete note.archivedAt;
+  state.notes.unshift(note);
+  closeArchiveModal();
+  renderNotes();
+  scheduleSave();
+}
+
+async function deleteArchivedNote(i) {
+  const ok = await confirm2('Permanently delete archived note "' + (state.archivedNotes[i].title || 'Untitled') + '"?');
+  if (!ok) return;
+  state.archivedNotes.splice(i, 1);
+  closeArchiveModal();
+  openArchiveModal();
+  renderNotes();
+  scheduleSave();
+}
+
+// ── Command Palette ────────────────────────────────────────
+let cmdSelectedIdx = -1;
+
+function openCmdPalette() {
+  const ov = document.getElementById('cmd-ov');
+  if (!ov) return;
+  ov.classList.add('open');
+  const inp = document.getElementById('cmd-input');
+  inp.value = '';
+  inp.focus();
+  renderCmds('');
+}
+
+function closeCmdPalette() {
+  const ov = document.getElementById('cmd-ov');
+  if (ov) ov.classList.remove('open');
+  cmdSelectedIdx = -1;
+}
+
+function filterCmds() {
+  renderCmds(document.getElementById('cmd-input').value.trim().toLowerCase());
+}
+
+function renderCmds(q) {
+  const res = document.getElementById('cmd-results');
+  if (!res) return;
+  res.innerHTML = '';
+  cmdSelectedIdx = -1;
+
+  const tabs  = [
+    { ico:'🏠', lbl:'Dashboard',  meta:'Tab', action:()=>{ showTab('dashboard'); closeCmdPalette(); }},
+    { ico:'📋', lbl:'Topic List', meta:'Tab', action:()=>{ showTab('topics');    closeCmdPalette(); }},
+    { ico:'📊', lbl:'Assessments',meta:'Tab', action:()=>{ showTab('assessments');closeCmdPalette();}},
+    { ico:'❌', lbl:'Missed Qs',  meta:'Tab', action:()=>{ showTab('missed');    closeCmdPalette(); }},
+    { ico:'📝', lbl:'Notes',      meta:'Tab', action:()=>{ showTab('notes');     closeCmdPalette(); }},
+  ];
+
+  const noteItems = (state.notes||[]).map((n,i) => ({
+    ico:'📄', lbl: n.title || 'Untitled note', meta:'Note',
+    action: ()=>{ showTab('notes'); closeCmdPalette(); setTimeout(()=>{ const el=document.getElementById('note-'+i); if(el)el.scrollIntoView({behavior:'smooth'}); },200); }
+  }));
+
+  const actions = [
+    { ico:'✅', lbl:'+ New Note',             meta:'Action', action:()=>{ showTab('notes'); closeCmdPalette(); addNote(); }},
+    { ico:'➕', lbl:'+ New Missed Session',   meta:'Action', action:()=>{ showTab('missed'); closeCmdPalette(); addMissedSession(); }},
+  ];
+
+  const allItems = [...tabs, ...noteItems, ...actions];
+  const filtered = q ? allItems.filter(it => it.lbl.toLowerCase().includes(q)) : allItems;
+
+  if (!filtered.length) {
+    res.innerHTML = '<div id="cmd-empty">No results for "' + escH(q) + '"</div>';
+    return;
+  }
+
+  // Group by meta
+  const groups = {};
+  filtered.forEach(it => { if (!groups[it.meta]) groups[it.meta] = []; groups[it.meta].push(it); });
+  Object.entries(groups).forEach(([grp, items]) => {
+    const gl = document.createElement('div'); gl.className = 'cmd-grp'; gl.textContent = grp;
+    res.appendChild(gl);
+    items.forEach(it => {
+      const div = document.createElement('div');
+      div.className = 'cmd-res';
+      div.innerHTML = `<span class="cmd-res-ico">${it.ico}</span><span class="cmd-res-lbl">${escH(it.lbl)}</span><span class="cmd-res-meta">${it.meta}</span>`;
+      div.onclick = it.action;
+      div.addEventListener('mouseenter', () => {
+        document.querySelectorAll('.cmd-res').forEach(r=>r.classList.remove('sel'));
+        div.classList.add('sel');
+      });
+      res.appendChild(div);
+    });
+  });
+}
+
+function cmdKey(e) {
+  const items = document.querySelectorAll('.cmd-res');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    cmdSelectedIdx = Math.min(cmdSelectedIdx + 1, items.length - 1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    cmdSelectedIdx = Math.max(cmdSelectedIdx - 1, 0);
+  } else if (e.key === 'Enter') {
+    const sel = items[cmdSelectedIdx] || items[0];
+    if (sel) sel.click();
+    return;
+  } else if (e.key === 'Escape') {
+    closeCmdPalette(); return;
+  } else { return; }
+  items.forEach((r,i) => r.classList.toggle('sel', i === cmdSelectedIdx));
+  if (items[cmdSelectedIdx]) items[cmdSelectedIdx].scrollIntoView({ block:'nearest' });
+}
+
+// ── Confirm Dialog ─────────────────────────────────────────
+let confirmResolve = () => {};
+
+function confirm2(msg) {
+  return new Promise(resolve => {
+    document.getElementById('confirm-msg').textContent = msg;
+    document.getElementById('confirm-ov').classList.add('open');
+    confirmResolve = (val) => {
+      document.getElementById('confirm-ov').classList.remove('open');
+      confirmResolve = () => {};
+      resolve(val);
+    };
+  });
+}
+
+// ── Helpers ───────────────────────────────────────────────
+function escH(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
