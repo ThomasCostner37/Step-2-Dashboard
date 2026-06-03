@@ -76,7 +76,7 @@ window.onload = function () {
     });
 
     // Try silent sign-in first (works if user was signed in before)
-    tokenClient.requestAccessToken({ prompt: 'none' });
+    setTimeout(() => tokenClient.requestAccessToken({ prompt: 'none' }), 100);
   });
 };
 
@@ -125,7 +125,7 @@ function scheduleSave() {
 }
 
 async function saveToDrive() {
-  if (!accessToken) return;
+  if (!gapi.client.getToken()) return;
   try {
     const doc = await gapi.client.docs.documents.get({ documentId: DOC_ID });
     const lastIndex = doc.result.body.content.reduce((m, el) => el.endIndex ? Math.max(m, el.endIndex) : m, 1);
@@ -151,6 +151,7 @@ function setSaveDot(state) {
 // ── Render All ────────────────────────────────────────────
 function renderAll() {
   updateCountdown();
+  updateRing();  
   renderFocusPanel();
   renderHeatmap();
   renderChart();
