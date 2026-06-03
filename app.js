@@ -4,19 +4,51 @@
 
 const SCOPES = 'https://www.googleapis.com/auth/documents';
 
-const TOPICS = [
-  'OB complications + labor/delivery',
-  'Female reproductive: menstrual/endocrine, infections, breast, Pap/HPV',
-  'Thyroid disorders',
-  'Pediatric developmental/behavioral disorders',
-  'Pediatric congenital GI',
-  'Respiratory: upper airway + obstructive disease',
-  'GI: inflammatory/bacterial/small bowel-colon',
-  'Biostatistics/test characteristics',
-  'Cardiology: endocarditis, congenital, PAD, ACS/HF basics',
-  'Fluids/electrolytes cleanup',
-  'Anemia/transfusion cleanup',
-  'Ethics/QI light maintenance'
+const TOPICS = []; // All topics are user-managed; seeded from data on first load
+
+// Topics derived from EPC (below national avg OR below 80%) and CMS (<80% correct, ≥5 incorrect)
+const DEFAULT_TOPICS = [
+  // ── EPC weak spots ──────────────────────────────────────
+  // Family Med Shelf 2
+  { name:'FM — Older Adult (66+)',                    src:'epc' },
+  // Pediatrics Shelf 2 — none below avg or <80
+  // Surgery Shelf 2
+  { name:'Surgery — Female Repro, Breast & Endo',    src:'epc' },
+  { name:'Surgery — Applying Foundational Science',  src:'epc' },
+  { name:'Surgery — Respiratory System',             src:'epc' },
+  { name:'Surgery — Pharmacotherapy & Mgmt',         src:'epc' },
+  // Psychiatry Shelf 2
+  { name:'Psych — Diseases of Nervous System',       src:'epc' },
+  // OB/GYN Shelf 2
+  { name:'OB/GYN — Health Maint & Prevention',       src:'epc' },
+  // Internal Med Shelf 2
+  { name:'IM — Cardiovascular System',               src:'epc' },
+  { name:'IM — Respiratory System',                  src:'epc' },
+  { name:'IM — Gastrointestinal System',             src:'epc' },
+  { name:'IM — Diagnosis',                           src:'epc' },
+  // ── CMS weak spots (<80% correct, ≥5 incorrect) ─────────
+  { name:'Endo: thyroid disorders',                  src:'cms' },
+  { name:'Behavioral: disorders infancy/childhood',  src:'cms' },
+  { name:'Gastro: congenital disorders',             src:'cms' },
+  { name:'Resp: upper airway disorders',             src:'cms' },
+  { name:'Biostat: sensitivity/specificity',         src:'cms' },
+  { name:'OB: obstetric complications',              src:'cms' },
+  { name:'OB: labor and delivery',                   src:'cms' },
+  { name:'OB: supervision of normal pregnancy',      src:'cms' },
+  { name:'OB: systemic disorders in pregnancy',      src:'cms' },
+  { name:'F Repro: menstrual/endocrine disorders',   src:'cms' },
+  { name:'F Repro: fertility and infertility',       src:'cms' },
+  { name:'F Repro: menopause',                       src:'cms' },
+  { name:'Cardio: infectious disorders',             src:'cms' },
+  { name:'Cardio: peripheral arterial vascular',     src:'cms' },
+  { name:'Cardio: dysrhythmias',                     src:'cms' },
+  { name:'Cardio: congenital disorders',             src:'cms' },
+  { name:'Resp: obstructive airway disease',         src:'cms' },
+  { name:'Gastro: immunologic/inflammatory',         src:'cms' },
+  { name:'Blood: reactions to blood components',     src:'cms' },
+  { name:'GenPrin: childhood developmental stages',  src:'cms' },
+  { name:'Renal/Urin: adverse effects of drugs',     src:'cms' },
+  { name:'Multi: fluid/electrolyte disorders',       src:'cms' },
 ];
 
 const DEFAULT_RESOURCES = [
@@ -306,28 +338,35 @@ function normalizeState() {
     delete state.topicNotes;
   }
 
-  // Ensure all base topics exist (add missing ones to end)
-  TOPICS.forEach(name => {
-    const exists = state.topics.some(t => t.name === name) ||
-                   state.archivedTopics.some(t => t.name === name);
-    if (!exists) state.topics.push({ id:uid(), name, done:false });
+  // Remove any old fixed base topics that no longer apply
+  const oldBaseNames = [
+    'OB complications + labor/delivery',
+    'Female reproductive: menstrual/endocrine, infections, breast, Pap/HPV',
+    'Thyroid disorders','Pediatric developmental/behavioral disorders',
+    'Pediatric congenital GI','Respiratory: upper airway + obstructive disease',
+    'GI: inflammatory/bacterial/small bowel-colon','Biostatistics/test characteristics',
+    'Cardiology: endocarditis, congenital, PAD, ACS/HF basics',
+    'Fluids/electrolytes cleanup','Anemia/transfusion cleanup','Ethics/QI light maintenance',
+    'ob','frepro','resp','cardio','endo','multi','blood','cns','gi','beh','bio','msk'
+  ];
+  state.topics = state.topics.filter(t => !oldBaseNames.includes(t.name));
+
+  // Seed DEFAULT_TOPICS if list is empty (first load or after clearing old ones)
+  if (!state.topics.length && !state.archivedTopics.length) {
+    state.topics = DEFAULT_TOPICS.map(t => ({
+      id: uid(), name: t.name, done: false, priority: 'none', src: t.src
+    }));
+  }
+
+  // Ensure every topic has a priority field
+  state.topics.forEach(t => {
+    if (!t.id)       t.id       = uid();
+    if (!t.priority) t.priority = 'none';
   });
 
-  // Migrate old key-named topics (ob, frepro, etc)
-  const oldToNew = {
-    ob:'OB complications + labor/delivery',
-    frepro:'Female reproductive: menstrual/endocrine, infections, breast, Pap/HPV',
-    resp:'Respiratory: upper airway + obstructive disease',
-    cardio:'Cardiology: endocarditis, congenital, PAD, ACS/HF basics',
-    endo:'Thyroid disorders', multi:'Fluids/electrolytes cleanup',
-    blood:'Anemia/transfusion cleanup', cns:'Pediatric developmental/behavioral disorders',
-    gi:'GI: inflammatory/bacterial/small bowel-colon', beh:'Ethics/QI light maintenance',
-    bio:'Biostatistics/test characteristics', msk:'Pediatric congenital GI'
-  };
-  state.topics = state.topics.map(t => {
-    if (oldToNew[t.name]) return { ...t, name: oldToNew[t.name] };
-    return t;
-  });
+  // Sort topics by priority: high → medium → low/none
+  const PRIO_ORDER = { high:0, medium:1, low:2, none:3 };
+  state.topics.sort((a,b) => (PRIO_ORDER[a.priority]||3) - (PRIO_ORDER[b.priority]||3));
 
   // Ensure resources are objects
   if (state.resources.length && typeof state.resources[0] === 'string') {
@@ -1049,7 +1088,14 @@ function renderTopics() {
   container.innerHTML = '';
 
   const q = (document.getElementById('topic-search-inp') || {}).value?.trim().toLowerCase() || '';
-  const shown = (state.topics || []).filter(t => {
+
+  // Sort by priority first, then filter
+  const PRIO_ORDER = { high:0, medium:1, low:2, none:3 };
+  const all = [...(state.topics || [])].sort((a,b) =>
+    (PRIO_ORDER[a.priority]||3) - (PRIO_ORDER[b.priority]||3)
+  );
+
+  const shown = all.filter(t => {
     if (topicFullFilter === 'open' && t.done) return false;
     if (topicFullFilter === 'done' && !t.done) return false;
     if (q && !t.name.toLowerCase().includes(q)) return false;
@@ -1062,8 +1108,20 @@ function renderTopics() {
     return;
   }
 
-  shown.forEach((topic, visIdx) => {
+  shown.forEach((topic) => {
     const realIdx = state.topics.indexOf(topic);
+    const prio = topic.priority || 'none';
+    const prioBadge = prio === 'high'
+      ? '<span style="font-family:var(--font-mono);font-size:.55rem;padding:1px 6px;border-radius:10px;background:#FCEBEB;color:#A32D2D;border:1px solid #F09595;flex-shrink:0">HIGH</span>'
+      : prio === 'medium'
+      ? '<span style="font-family:var(--font-mono);font-size:.55rem;padding:1px 6px;border-radius:10px;background:#FAEEDA;color:#633806;border:1px solid #EF9F27;flex-shrink:0">MED</span>'
+      : prio === 'low'
+      ? '<span style="font-family:var(--font-mono);font-size:.55rem;padding:1px 6px;border-radius:10px;background:var(--bg-elevated);color:var(--text-tertiary);border:1px solid var(--border);flex-shrink:0">LOW</span>'
+      : '';
+    const prioTitle = prio === 'none' ? 'Set priority' : prio === 'high' ? 'High → Medium' : prio === 'medium' ? 'Medium → Low' : 'Low → None';
+    const prioIcon = prio === 'none' ? '○' : prio === 'high' ? '●' : prio === 'medium' ? '◑' : '◔';
+    const prioColor = prio === 'high' ? '#A32D2D' : prio === 'medium' ? '#633806' : prio === 'low' ? 'var(--text-tertiary)' : 'var(--text-tertiary)';
+
     const row = document.createElement('div');
     row.className = 'topic-row-full' + (topic.done ? ' done' : '');
     row.dataset.id = topic.id;
@@ -1072,7 +1130,11 @@ function renderTopics() {
       <span class="topic-drag-handle" title="Drag to reorder">⠿</span>
       <div class="t-check" onclick="event.stopPropagation();toggleTopicDone('${topic.id}')" style="cursor:pointer;width:18px;height:18px;border-radius:4px;border:1px solid var(--border-bright);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0">${topic.done?'✓':''}</div>
       <div class="topic-name-full" onclick="event.stopPropagation();toggleTopicDone('${topic.id}')" style="cursor:pointer">${escH(topic.name)}</div>
-      <button class="topic-arch-btn" onclick="event.stopPropagation();archiveTopicById('${topic.id}')">Archive</button>
+      ${prioBadge}
+      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+        <button class="topic-arch-btn" title="${prioTitle}" onclick="event.stopPropagation();cycleTopicPriority('${topic.id}')" style="color:${prioColor};font-size:.7rem;min-width:22px">${prioIcon}</button>
+        <button class="topic-arch-btn" onclick="event.stopPropagation();archiveTopicById('${topic.id}')">Archive</button>
+      </div>
     `;
 
     // Drag events
@@ -1120,6 +1182,17 @@ function toggleTopicDone(id) {
   if (!t) return;
   t.done = !t.done;
   renderTopics(); renderWeakSpots(); updateRing(); scheduleSave();
+}
+
+function cycleTopicPriority(id) {
+  const t = state.topics.find(x => x.id === id);
+  if (!t) return;
+  const cycle = { none:'high', high:'medium', medium:'low', low:'none' };
+  t.priority = cycle[t.priority || 'none'];
+  // Re-sort by priority
+  const PRIO_ORDER = { high:0, medium:1, low:2, none:3 };
+  state.topics.sort((a,b) => (PRIO_ORDER[a.priority]||3) - (PRIO_ORDER[b.priority]||3));
+  renderTopics(); renderWeakSpots(); scheduleSave();
 }
 
 function addTopic() {
@@ -1392,11 +1465,10 @@ function renderEpcBars() {
 
   subs.forEach(sub => {
     const diff = sub.you - sub.avg;
-    const barColor = diff >= 3 ? '#639922' : diff <= -3 ? '#E24B4A' : '#888780';
-    const diffColor = diff >= 3 ? '#3B6D11' : diff <= -3 ? '#A32D2D' : 'var(--text-tertiary)';
-    const diffBg = diff >= 3 ? '#EAF3DE' : diff <= -3 ? '#FCEBEB' : 'var(--bg-subtle)';
-    const diffStr = (diff >= 0 ? '+' : '') + diff;
-    const maxW = 100;
+    const barColor   = diff >= 0 ? '#639922' : '#E24B4A';
+    const diffColor  = diff >= 0 ? '#3B6D11' : '#A32D2D';
+    const diffBg     = diff >= 0 ? '#EAF3DE' : '#FCEBEB';
+    const diffStr    = (diff >= 0 ? '+' : '') + diff;
 
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:7px';
