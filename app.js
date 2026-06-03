@@ -373,7 +373,7 @@ function normalizeState() {
 
   // Sort topics by priority: high → medium → low/none
   const PRIO_ORDER = { high:0, medium:1, low:2, none:3 };
-  state.topics.sort((a,b) => (PRIO_ORDER[a.priority]||3) - (PRIO_ORDER[b.priority]||3));
+  state.topics.sort((a,b) => (PRIO_ORDER[a.priority] ?? 3) - (PRIO_ORDER[b.priority] ?? 3));
 
   // Ensure resources are objects
   if (state.resources.length && typeof state.resources[0] === 'string') {
@@ -1041,7 +1041,7 @@ function renderWeakSpots() {
 
   const PRIO_ORDER = { high:0, medium:1, low:2, none:3 };
   const all  = [...(state.topics || [])].sort((a,b) =>
-    (PRIO_ORDER[a.priority]||3) - (PRIO_ORDER[b.priority]||3)
+    (PRIO_ORDER[a.priority] ?? 3) - (PRIO_ORDER[b.priority] ?? 3)
   );
   const done = all.filter(t => t.done).length;
   const pct  = all.length ? Math.round((done/all.length)*100) : 0;
@@ -1111,7 +1111,7 @@ function renderTopics() {
   // Sort by priority first, then filter
   const PRIO_ORDER = { high:0, medium:1, low:2, none:3 };
   const all = [...(state.topics || [])].sort((a,b) =>
-    (PRIO_ORDER[a.priority]||3) - (PRIO_ORDER[b.priority]||3)
+    (PRIO_ORDER[a.priority] ?? 3) - (PRIO_ORDER[b.priority] ?? 3)
   );
 
   const shown = all.filter(t => {
@@ -1210,7 +1210,7 @@ function cycleTopicPriority(id) {
   t.priority = cycle[t.priority || 'none'];
   // Re-sort by priority
   const PRIO_ORDER = { high:0, medium:1, low:2, none:3 };
-  state.topics.sort((a,b) => (PRIO_ORDER[a.priority]||3) - (PRIO_ORDER[b.priority]||3));
+  state.topics.sort((a,b) => (PRIO_ORDER[a.priority] ?? 3) - (PRIO_ORDER[b.priority] ?? 3));
   renderTopics(); renderWeakSpots(); scheduleSave();
 }
 
