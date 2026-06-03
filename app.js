@@ -31,7 +31,6 @@ window.onload = () => {
   buildNbmeGrid();
   for (let i = 0; i < 3; i++) addMissedSession();
   initShelfChart();
-  renderCustomTopics();
 
   const saved = localStorage.getItem('step2_access_token');
   if (saved) {
@@ -174,7 +173,6 @@ function collectState() {
   document.querySelectorAll('input[type=checkbox]').forEach(el => { if (el.id) state[el.id] = el.checked; });
   document.querySelectorAll('input.score-input').forEach(el => { if (el.id) state[el.id] = el.value; });
 
-  // Missed sessions
   state._missedSessions = [];
   document.querySelectorAll('.missed-session').forEach(sess => {
     const title = sess.querySelector('.session-title-input').value;
@@ -185,7 +183,6 @@ function collectState() {
     state._missedSessions.push({ title, rows });
   });
 
-  // Notes
   state._notesSections = [];
   document.querySelectorAll('#notes-sections > .note-card').forEach(card => {
     state._notesSections.push({
@@ -195,16 +192,11 @@ function collectState() {
     });
   });
 
-  // Archives
   state._archivedSections = [];
   document.querySelectorAll('#archive-list > .archive-item').forEach(item => {
-    state._archivedSections.push({
-      name: item.dataset.name,
-      content: item.dataset.content
-    });
+    state._archivedSections.push({ name: item.dataset.name, content: item.dataset.content });
   });
 
-  // Custom topics
   state._customTopics = [];
   document.querySelectorAll('#custom-topics-list > .custom-topic-item').forEach(item => {
     state._customTopics.push({
@@ -215,7 +207,6 @@ function collectState() {
     });
   });
 
-  // Resources
   state._customResources = [];
   document.querySelectorAll('#custom-resources-list > .resource-custom-item').forEach(item => {
     state._customResources.push({
@@ -241,32 +232,28 @@ function applyState(state) {
     if (el && state[id]) { el.checked = true; toggleExam(id); }
   });
 
-  // Missed sessions
   document.getElementById('missed-sessions-container').innerHTML = '';
   const mSessions = state._missedSessions || [];
   if (mSessions.length > 0) mSessions.forEach(s => addMissedSession(s.title, s.rows));
   else for (let i = 0; i < 3; i++) addMissedSession();
 
-  // Notes
   document.getElementById('notes-sections').innerHTML = '';
   const notes = state._notesSections || [];
   if (notes.length > 0) notes.forEach(n => addNoteCard(n.name, n.content, n.id));
   else addNoteCard('General Notes', '');
 
-  // Archives
   document.getElementById('archive-list').innerHTML = '';
   (state._archivedSections || []).forEach(n => addArchiveItem(n.name, n.content));
 
-  // Custom topics
   document.getElementById('custom-topics-list').innerHTML = '';
   (state._customTopics || []).forEach(t => addCustomTopic(t.name, t.done, t.revisit, t.where));
 
-  // Resources
   document.getElementById('custom-resources-list').innerHTML = '';
   (state._customResources || []).forEach(r => addCustomResource(r.text, r.done));
 
   updateProgress();
   updateMissedCount();
+  updateArchiveCount();
 }
 
 function schedSave() {
@@ -285,10 +272,6 @@ function signOut() {
 // ============================================================
 // TOPIC LIST
 // ============================================================
-function renderCustomTopics() {
-  // already handled by applyState; on first load the list is empty
-}
-
 function addCustomTopic(name, done, revisit, where) {
   const inputEl = document.getElementById('new-topic-input');
   const topicName = name || (inputEl ? inputEl.value.trim() : '');
@@ -298,15 +281,22 @@ function addCustomTopic(name, done, revisit, where) {
   const id = 'ct-' + Date.now() + '-' + Math.random().toString(36).slice(2);
   const item = document.createElement('div');
   item.className = 'topic-card custom-topic-item';
-  item.style.cssText = 'display:flex;align-items:center;gap:14px;padding:14px 18px;margin-bottom:8px';
   item.innerHTML = `
-    <input type="checkbox" class="custom-topic-check topic-check" id="${id}-done" ${done ? 'checked' : ''} onchange="toggleCustomTopicDone(this);schedSave()" style="width:17px;height:17px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
-    <label for="${id}-done" class="custom-topic-name" style="flex:1;font-size:14px;font-weight:500;cursor:pointer;${done ? 'text-decoration:line-through;opacity:0.5' : ''}">${topicName}</label>
-    <input class="custom-topic-where where-input" placeholder="UW / AMBOSS" value="${where || ''}" oninput="schedSave()" style="width:110px">
-    <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;cursor:pointer">
-      <input type="checkbox" class="custom-topic-revisit" ${revisit ? 'checked' : ''} onchange="schedSave()" style="width:13px;height:13px;accent-color:var(--gold);cursor:pointer">Revisit
+    <input type="checkbox" class="custom-topic-check" id="${id}-done" ${done ? 'checked' : ''}
+      onchange="toggleCustomTopicDone(this);schedSave()"
+      style="width:16px;height:16px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
+    <label for="${id}-done" class="custom-topic-name"
+      style="flex:1;font-size:14px;font-weight:500;cursor:pointer;${done ? 'text-decoration:line-through;opacity:0.45' : ''}">${topicName}</label>
+    <input class="custom-topic-where where-input" placeholder="Source" value="${where || ''}" oninput="schedSave()">
+    <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;cursor:pointer;white-space:nowrap">
+      <input type="checkbox" class="custom-topic-revisit" ${revisit ? 'checked' : ''}
+        onchange="schedSave()" style="width:13px;height:13px;accent-color:var(--gold);cursor:pointer">Revisit
     </label>
-    <button onclick="confirmRemoveCustomTopic(this)" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:2px 4px;line-height:1" title="Remove">×</button>
+    <button onclick="confirmRemoveCustomTopic(this)"
+      style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;padding:2px 6px;line-height:1;border-radius:4px;transition:all .15s"
+      onmouseover="this.style.color='var(--red)';this.style.background='var(--red-light)'"
+      onmouseout="this.style.color='var(--muted)';this.style.background='none'"
+      title="Remove">×</button>
   `;
   document.getElementById('custom-topics-list').appendChild(item);
   schedSave();
@@ -315,11 +305,12 @@ function addCustomTopic(name, done, revisit, where) {
 function toggleCustomTopicDone(cb) {
   const label = cb.closest('.custom-topic-item').querySelector('.custom-topic-name');
   label.style.textDecoration = cb.checked ? 'line-through' : '';
-  label.style.opacity = cb.checked ? '0.5' : '1';
+  label.style.opacity = cb.checked ? '0.45' : '1';
+  updateProgress();
 }
 
 function confirmRemoveCustomTopic(btn) {
-  if (confirm('Remove this topic?')) { btn.closest('.custom-topic-item').remove(); schedSave(); }
+  if (confirm('Remove this topic?')) { btn.closest('.custom-topic-item').remove(); schedSave(); updateProgress(); }
 }
 
 // ============================================================
@@ -333,22 +324,30 @@ function addCustomResource(text, done) {
 
   const item = document.createElement('div');
   item.className = 'resource-custom-item';
-  const id = 'cr-' + Date.now();
+  const id = 'cr-' + Date.now() + Math.random().toString(36).slice(2);
   item.innerHTML = `
-    <input type="checkbox" class="res-check" id="${id}" ${done ? 'checked' : ''} onchange="schedSave()" style="width:14px;height:14px;accent-color:var(--green);cursor:pointer;flex-shrink:0;accent-color:var(--green)">
-    <label for="${id}" class="res-label" style="flex:1;font-size:13px;cursor:pointer;${done ? 'text-decoration:line-through;opacity:0.5' : ''}">${resText}</label>
-    <button onclick="confirmRemoveResource(this)" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:15px;padding:0 3px;opacity:0.6" title="Remove">×</button>
+    <input type="checkbox" class="res-check" id="${id}" ${done ? 'checked' : ''}
+      style="width:14px;height:14px;accent-color:var(--green);cursor:pointer;flex-shrink:0">
+    <label for="${id}" class="res-label"
+      style="flex:1;font-size:13px;cursor:pointer;${done ? 'text-decoration:line-through;opacity:0.45' : ''}">${resText}</label>
+    <button onclick="confirmRemoveResource(this)"
+      style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:0 4px;border-radius:4px;transition:all .15s"
+      onmouseover="this.style.color='var(--red)'"
+      onmouseout="this.style.color='var(--muted)'"
+      title="Remove">×</button>
   `;
   item.querySelector('.res-check').addEventListener('change', function() {
-    item.querySelector('.res-label').style.textDecoration = this.checked ? 'line-through' : '';
-    item.querySelector('.res-label').style.opacity = this.checked ? '0.5' : '1';
+    const lbl = item.querySelector('.res-label');
+    lbl.style.textDecoration = this.checked ? 'line-through' : '';
+    lbl.style.opacity = this.checked ? '0.45' : '1';
+    schedSave();
   });
   document.getElementById('custom-resources-list').appendChild(item);
   schedSave();
 }
 
 function confirmRemoveResource(btn) {
-  if (confirm('Remove this resource item?')) { btn.closest('.resource-custom-item').remove(); schedSave(); }
+  if (confirm('Remove this item?')) { btn.closest('.resource-custom-item').remove(); schedSave(); }
 }
 
 // ============================================================
@@ -362,13 +361,18 @@ function addMissedSession(title, rows) {
   div.id = sessId;
   div.innerHTML = `
     <div class="missed-session-header">
-      <input class="session-title-input" placeholder="Session name (e.g. NBME 9)" value="${title || ''}" oninput="schedSave()">
-      <button class="missed-session-toggle" onclick="toggleMissedSession('${sessId}')">▾</button>
+      <div class="session-header-left">
+        <button class="missed-session-toggle" onclick="toggleMissedSession('${sessId}')">▾</button>
+        <input class="session-title-input" placeholder="Session name (e.g. NBME 9)" value="${title || ''}" oninput="schedSave()">
+      </div>
       <button class="btn-ghost-red" onclick="confirmRemoveSession('${sessId}')">Remove</button>
     </div>
     <div class="missed-session-body" id="body-${sessId}">
+      <div class="missed-table-header">
+        <span>Topic</span><span>Why I Missed It</span><span>Correct Thinking</span><span></span>
+      </div>
       <div class="missed-rows-container"></div>
-      <button class="add-row-btn" style="margin-top:8px" onclick="addMissedRow('${sessId}')">+ Add question</button>
+      <button class="add-row-btn" style="margin-top:10px" onclick="addMissedRow('${sessId}')">+ Add question</button>
     </div>
   `;
   container.appendChild(div);
@@ -383,10 +387,13 @@ function addMissedRow(sessId, vals) {
   const row = document.createElement('div');
   row.className = 'missed-row';
   row.innerHTML = `
-    <input class="missed-input" placeholder="Topic" value="${vals ? (vals[0] || '') : ''}" oninput="schedSave()">
-    <input class="missed-input" placeholder="Why missed" value="${vals ? (vals[1] || '') : ''}" oninput="schedSave()">
-    <input class="missed-input" placeholder="Correct thinking" value="${vals ? (vals[2] || '') : ''}" oninput="schedSave()">
-    <button onclick="this.closest('.missed-row').remove();schedSave();updateMissedCount()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:0 4px;flex-shrink:0">×</button>
+    <input class="missed-input" placeholder="e.g. SIADH vs CSW" value="${vals ? (vals[0] || '') : ''}" oninput="schedSave()">
+    <input class="missed-input" placeholder="e.g. Confused Na trend direction" value="${vals ? (vals[1] || '') : ''}" oninput="schedSave()">
+    <input class="missed-input" placeholder="e.g. SIADH Na rises with fluids…" value="${vals ? (vals[2] || '') : ''}" oninput="schedSave()">
+    <button onclick="this.closest('.missed-row').remove();schedSave();updateMissedCount()"
+      style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:18px;padding:0 6px;line-height:1;border-radius:4px;transition:all .15s;flex-shrink:0"
+      onmouseover="this.style.color='var(--red)'"
+      onmouseout="this.style.color='var(--muted)'">×</button>
   `;
   container.appendChild(row);
   updateMissedCount();
@@ -415,7 +422,7 @@ function updateMissedCount() {
 }
 
 // ============================================================
-// NOTES
+// NOTES — with keyboard shortcut support
 // ============================================================
 function addNoteCard(name, content, existingId) {
   const inputEl = document.getElementById('new-note-name');
@@ -431,24 +438,50 @@ function addNoteCard(name, content, existingId) {
     <div class="note-card-header">
       <span class="note-card-title" contenteditable="true" spellcheck="false" onblur="schedSave()">${noteName}</span>
       <div class="note-card-actions">
-        <button class="note-action-btn" onclick="archiveNoteCard('${id}')" title="Archive">⊙ Archive</button>
+        <button class="note-action-btn" onclick="archiveNoteCard('${id}')">⊙ Archive</button>
       </div>
     </div>
-    <div class="note-toolbar">
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('bold')" title="Bold"><b>B</b></button>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('italic')" title="Italic"><i>I</i></button>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('underline')" title="Underline"><u>U</u></button>
+    <div class="note-toolbar" id="toolbar-${id}">
+      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('bold')" title="Bold (⌘B)"><b>B</b></button>
+      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('italic')" title="Italic (⌘I)"><i>I</i></button>
+      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('underline')" title="Underline (⌘U)"><u>U</u></button>
+      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('strikeThrough')" title="Strikethrough" style="text-decoration:line-through">S</button>
       <div class="toolbar-sep"></div>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('insertUnorderedList')" title="Bullet list">≡</button>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('insertOrderedList')" title="Numbered list">№</button>
+      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('insertUnorderedList')" title="Bullet list">• List</button>
+      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('insertOrderedList')" title="Numbered list">1. List</button>
       <div class="toolbar-sep"></div>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#C9A84C')" title="Highlight gold" style="color:var(--gold)">A</button>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#2B6CB0')" title="Highlight blue" style="color:var(--blue)">A</button>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#276749')" title="Highlight green" style="color:var(--green)">A</button>
-      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#9B2335')" title="Highlight red" style="color:var(--red)">A</button>
+      <button class="toolbar-btn" onmousedown="event.preventDefault();document.execCommand('removeFormat')" title="Clear formatting" style="font-size:10px">Clear</button>
+      <div class="toolbar-sep"></div>
+      <span style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;padding:0 4px;align-self:center">Color:</span>
+      <button class="toolbar-color" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#111827')" title="Black" style="background:#111827"></button>
+      <button class="toolbar-color" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#D4A84B')" title="Gold" style="background:#D4A84B"></button>
+      <button class="toolbar-color" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#3B82F6')" title="Blue" style="background:#3B82F6"></button>
+      <button class="toolbar-color" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#059669')" title="Green" style="background:#059669"></button>
+      <button class="toolbar-color" onmousedown="event.preventDefault();document.execCommand('foreColor','false','#DC2626')" title="Red" style="background:#DC2626"></button>
     </div>
-    <div class="note-editor" contenteditable="true" spellcheck="true" oninput="schedSave()" placeholder="Start writing…">${content || ''}</div>
+    <div class="note-editor" contenteditable="true" spellcheck="true" placeholder="Start writing…"
+      oninput="schedSave()">${content || ''}</div>
   `;
+
+  // Attach keyboard shortcut handler to the editor
+  const editor = card.querySelector('.note-editor');
+  editor.addEventListener('keydown', function(e) {
+    if (e.metaKey || e.ctrlKey) {
+      switch(e.key.toLowerCase()) {
+        case 'b': e.preventDefault(); document.execCommand('bold'); break;
+        case 'i': e.preventDefault(); document.execCommand('italic'); break;
+        case 'u': e.preventDefault(); document.execCommand('underline'); break;
+        case 'z': break; // allow undo
+        default: break;
+      }
+    }
+    // Tab → indent
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      document.execCommand('insertHTML', false, '&nbsp;&nbsp;&nbsp;&nbsp;');
+    }
+  });
+
   document.getElementById('notes-sections').appendChild(card);
 }
 
@@ -471,7 +504,6 @@ function addArchiveItem(name, content) {
   item.className = 'archive-item';
   item.dataset.name = name;
   item.dataset.content = content;
-  const id = 'arch-' + Date.now();
   item.innerHTML = `
     <div class="archive-item-header">
       <span class="archive-item-name">${name}</span>
@@ -480,7 +512,7 @@ function addArchiveItem(name, content) {
         <button class="btn-ghost-red" onclick="confirmDeleteArchive(this)">Delete</button>
       </div>
     </div>
-    <div class="archive-preview">${content.replace(/<[^>]+>/g, ' ').slice(0, 120)}${content.length > 120 ? '…' : ''}</div>
+    <div class="archive-preview">${(content || '').replace(/<[^>]+>/g, ' ').trim().slice(0, 140)}${(content || '').length > 140 ? '…' : ''}</div>
   `;
   list.appendChild(item);
   updateArchiveCount();
@@ -488,10 +520,8 @@ function addArchiveItem(name, content) {
 
 function unarchiveItem(btn) {
   const item = btn.closest('.archive-item');
-  const name = item.dataset.name;
-  const content = item.dataset.content;
+  addNoteCard(item.dataset.name, item.dataset.content);
   item.remove();
-  addNoteCard(name, content);
   updateArchiveCount();
   schedSave();
   closeArchiveModal();
@@ -513,24 +543,28 @@ function updateArchiveCount() {
   if (modalEmpty) modalEmpty.style.display = count > 0 ? 'none' : 'block';
 }
 
-function openArchiveModal() {
-  document.getElementById('archive-modal').classList.add('open');
-}
-
-function closeArchiveModal() {
-  document.getElementById('archive-modal').classList.remove('open');
-}
+function openArchiveModal() { document.getElementById('archive-modal').classList.add('open'); }
+function closeArchiveModal() { document.getElementById('archive-modal').classList.remove('open'); }
 
 // ============================================================
-// SHELF CHART
+// SHELF CHART + COUNTDOWN
 // ============================================================
 function initShelfChart() {
-  const now = new Date();
-  // Use floor for same-day accuracy (today is June 2, 2026)
-  const cssMs = new Date('2026-06-12') - now;
-  const stepMs = new Date('2026-08-12') - now;
-  document.getElementById('home-css-days').textContent = Math.max(0, Math.ceil(cssMs / 86400000));
-  document.getElementById('home-step-days').textContent = Math.max(0, Math.ceil(stepMs / 86400000));
+  // Timezone-safe countdown: compare midnight-to-midnight local
+  const today = new Date(); today.setHours(0,0,0,0);
+  const cssTarget = new Date('2026-06-12T00:00:00'); cssTarget.setHours(0,0,0,0);
+  const stepTarget = new Date('2026-08-12T00:00:00'); stepTarget.setHours(0,0,0,0);
+  const cssDays = Math.max(0, Math.round((cssTarget - today) / 86400000));
+  const stepDays = Math.max(0, Math.round((stepTarget - today) / 86400000));
+
+  const cssEl = document.getElementById('home-css-days');
+  const stepEl = document.getElementById('home-step-days');
+  if (cssEl) cssEl.textContent = cssDays;
+  if (stepEl) stepEl.textContent = stepDays;
+
+  // Urgency color on low days
+  if (cssEl && cssDays <= 14) cssEl.style.color = cssDays <= 7 ? '#EF4444' : '#F59E0B';
+  if (stepEl && stepDays <= 14) stepEl.style.color = stepDays <= 7 ? '#EF4444' : '#F59E0B';
 
   const labels = SHELF_SCORES.map(s => s.label);
   const scores = SHELF_SCORES.map(s => s.score);
@@ -541,33 +575,42 @@ function initShelfChart() {
 
   const ctx = document.getElementById('shelf-chart').getContext('2d');
   if (shelfChartInstance) shelfChartInstance.destroy();
+
   shelfChartInstance = new Chart(ctx, {
     type: 'line',
     data: {
       labels,
       datasets: [
         {
-          label: 'EPC Score',
+          label: 'EPC / % Score',
           data: scores,
-          borderColor: '#C9A84C',
-          backgroundColor: 'rgba(201,168,76,0.1)',
-          pointBackgroundColor: '#C9A84C',
+          borderColor: '#D4A84B',
+          backgroundColor: (ctx) => {
+            const chart = ctx.chart;
+            const {ctx: c, chartArea} = chart;
+            if (!chartArea) return 'transparent';
+            const gradient = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+            gradient.addColorStop(0, 'rgba(212,168,75,0.25)');
+            gradient.addColorStop(1, 'rgba(212,168,75,0)');
+            return gradient;
+          },
+          pointBackgroundColor: scores.map(s => s >= 90 ? '#10B981' : s >= 85 ? '#D4A84B' : s >= 80 ? '#3B82F6' : '#EF4444'),
           pointBorderColor: '#fff',
           pointBorderWidth: 2,
           pointRadius: 7,
-          pointHoverRadius: 10,
-          tension: 0.35,
+          pointHoverRadius: 11,
+          tension: 0.4,
           fill: true,
           order: 2,
         },
         {
           label: 'Running Avg',
           data: avgLine,
-          borderColor: 'rgba(255,255,255,0.35)',
-          borderDash: [5, 4],
+          borderColor: 'rgba(255,255,255,0.3)',
+          borderDash: [6, 4],
           borderWidth: 2,
           pointRadius: 0,
-          tension: 0.35,
+          tension: 0.4,
           fill: false,
           order: 1,
         }
@@ -575,27 +618,38 @@ function initShelfChart() {
     },
     options: {
       responsive: true,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: {
-          labels: { font: { family: "'DM Mono', monospace", size: 11 }, color: 'rgba(255,255,255,0.5)', boxWidth: 24 }
+          labels: { font: { family: "'DM Mono', monospace", size: 11 }, color: 'rgba(255,255,255,0.45)', boxWidth: 20, padding: 16 }
         },
         tooltip: {
-          backgroundColor: 'rgba(11,22,40,0.95)',
-          titleColor: '#C9A84C',
-          bodyColor: 'rgba(255,255,255,0.8)',
-          borderColor: 'rgba(201,168,76,0.3)',
+          backgroundColor: 'rgba(10,18,35,0.97)',
+          titleColor: '#D4A84B',
+          bodyColor: 'rgba(255,255,255,0.85)',
+          borderColor: 'rgba(212,168,75,0.25)',
           borderWidth: 1,
-          callbacks: { label: ctx => `  ${ctx.dataset.label}: ${ctx.parsed.y}%` }
+          padding: 10,
+          callbacks: {
+            label: ctx => `  ${ctx.dataset.label}: ${ctx.parsed.y}%`,
+            afterLabel: ctx => {
+              if (ctx.datasetIndex === 0) {
+                const s = ctx.parsed.y;
+                return s >= 90 ? '  ✦ Excellent' : s >= 85 ? '  ✓ Strong' : s >= 80 ? '  → On target' : '  ↓ Needs work';
+              }
+              return '';
+            }
+          }
         }
       },
       scales: {
         y: {
-          min: 60, max: 100,
-          ticks: { font: { family: "'DM Mono', monospace", size: 11 }, color: 'rgba(255,255,255,0.4)', callback: v => v + '%' },
-          grid: { color: 'rgba(255,255,255,0.06)' }
+          min: 65, max: 100,
+          ticks: { font: { family: "'DM Mono', monospace", size: 11 }, color: 'rgba(255,255,255,0.35)', callback: v => v + '%', stepSize: 5 },
+          grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
         },
         x: {
-          ticks: { font: { family: "'DM Mono', monospace", size: 10 }, color: 'rgba(255,255,255,0.4)', maxRotation: 40 },
+          ticks: { font: { family: "'DM Mono', monospace", size: 10 }, color: 'rgba(255,255,255,0.35)', maxRotation: 40 },
           grid: { display: false }
         }
       }
@@ -619,27 +673,26 @@ function showTab(t, el) {
   el.classList.add('active');
 }
 
-function updateCountdown() {
-  const now = new Date();
-  const cssEl = document.getElementById('css-days');
-  const stepEl = document.getElementById('step-days');
-  if (cssEl) cssEl.textContent = Math.max(0, Math.ceil((new Date('2026-06-12') - now) / 86400000));
-  if (stepEl) stepEl.textContent = Math.max(0, Math.ceil((new Date('2026-08-12') - now) / 86400000));
-}
-
 function updateProgress() {
   const builtIn = TOPICS.filter(id => document.getElementById('vis-' + id)?.checked).length;
   const customDone = document.querySelectorAll('.custom-topic-check:checked').length;
   const customTotal = document.querySelectorAll('.custom-topic-check').length;
   const done = builtIn + customDone;
   const total = TOPICS.length + customTotal;
-  document.getElementById('prog-text').textContent = done + ' / ' + total + ' topics done';
-  document.getElementById('prog-fill').style.width = (total ? (done / total * 100) : 0) + '%';
+  const pct = total ? Math.round(done / total * 100) : 0;
+  const el = document.getElementById('prog-text');
+  if (el) el.textContent = done + ' / ' + total + ' topics done · ' + pct + '%';
+  const fill = document.getElementById('prog-fill');
+  if (fill) fill.style.width = pct + '%';
+  // Update dashboard mini-stat if exists
+  const dash = document.getElementById('dash-topics-done');
+  if (dash) dash.textContent = done + ' / ' + total;
 }
 
 function markDone(id) {
   const card = document.getElementById('card-' + id);
   if (card) card.classList.toggle('done', document.getElementById('vis-' + id).checked);
+  updateProgress();
 }
 
 function buildNbmeGrid() {
