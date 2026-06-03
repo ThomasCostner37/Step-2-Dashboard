@@ -10,24 +10,24 @@
 <style>
 /* ── TOKENS ─────────────────────────────────────── */
 :root {
-  --bg-base:        #121009;
-  --bg-card:        #1A1710;
-  --bg-elevated:    #222018;
-  --bg-subtle:      #1E1B12;
-  --border:         #2C2820;
-  --border-bright:  #46402E;
-  --text-primary:   #EEE6CE;
-  --text-secondary: #9B9078;
-  --text-tertiary:  #584F3C;
-  --accent:         #C9913A;
-  --accent-glow:    rgba(201,145,58,.13);
-  --accent-text:    #E4AA56;
-  --urgent:         #CC5028;
+  --bg-base:        #F5F1EB;
+  --bg-card:        #FFFFFF;
+  --bg-elevated:    #F0EBE3;
+  --bg-subtle:      #FAF7F3;
+  --border:         #E0D8CC;
+  --border-bright:  #C8BDB0;
+  --text-primary:   #1C1814;
+  --text-secondary: #5C5249;
+  --text-tertiary:  #9A9089;
+  --accent:         #B07830;
+  --accent-glow:    rgba(176,120,48,.10);
+  --accent-text:    #8A5E20;
+  --urgent:         #B83A20;
   --urgent-mid:     #C47C25;
-  --success:        #5B8A5B;
-  --success-bg:     rgba(91,138,91,.12);
-  --info:           #4779A3;
-  --info-bg:        rgba(71,121,163,.12);
+  --success:        #2E7D32;
+  --success-bg:     rgba(46,125,50,.10);
+  --info:           #1A4A82;
+  --info-bg:        rgba(26,74,130,.10);
   --font-display:   'Fraunces', Georgia, serif;
   --font-mono:      'JetBrains Mono', monospace;
   --font-body:      'Outfit', system-ui, sans-serif;
@@ -45,7 +45,7 @@ body {
 }
 button  { font-family: var(--font-body); cursor: pointer; }
 input, textarea, select { font-family: var(--font-body); }
-input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.4); }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.2) sepia(.3); }
 
 /* ── AUTH SCREEN ─────────────────────────────────── */
 #auth-screen {
@@ -53,8 +53,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.4); }
   align-items: center; justify-content: center;
   min-height: 100vh; gap: 1rem;
   background: var(--bg-base);
-  text-align: center;
-  padding: 2rem;
+  text-align: center; padding: 2rem;
 }
 .auth-eyebrow {
   font-family: var(--font-mono); font-size: .65rem; letter-spacing: .12em;
@@ -68,16 +67,16 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.4); }
   font-family: var(--font-display); font-size: 3.2rem; font-weight: 800;
   letter-spacing: -.03em; color: var(--text-primary);
 }
-.auth-title span { color: var(--accent-text); }
+.auth-title span { color: var(--accent); }
 .auth-sub { color: var(--text-secondary); font-size: .9rem; margin-top: .25rem; }
 #sign-in-btn {
   margin-top: .75rem;
-  background: var(--accent-glow); border: 1px solid rgba(201,145,58,.3);
+  background: var(--accent-glow); border: 1px solid rgba(176,120,48,.3);
   color: var(--accent-text); padding: .7rem 1.75rem;
   border-radius: var(--r-md); font-size: .9rem; font-weight: 500;
   transition: all .2s;
 }
-#sign-in-btn:hover { background: rgba(201,145,58,.22); border-color: var(--accent); }
+#sign-in-btn:hover { background: rgba(176,120,48,.18); border-color: var(--accent); }
 
 /* ── APP SHELL ───────────────────────────────────── */
 #app { display: none; max-width: 1060px; margin: 0 auto; padding: 0 24px 80px; }
@@ -93,7 +92,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.4); }
   font-family: var(--font-display); font-size: 1.3rem; font-weight: 800;
   letter-spacing: -.02em; color: var(--text-primary);
 }
-.app-title span { color: var(--accent-text); }
+.app-title span { color: var(--accent); }
 .app-subtitle {
   font-family: var(--font-mono); font-size: .62rem; letter-spacing: .08em;
   text-transform: uppercase; color: var(--text-tertiary);
@@ -120,7 +119,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.4); }
 /* ── TAB BAR ─────────────────────────────────────── */
 .tab-bar {
   display: flex; gap: 2px; padding: 4px;
-  background: var(--bg-subtle); border: 1px solid var(--border);
+  background: var(--bg-elevated); border: 1px solid var(--border);
   border-radius: var(--r-md); margin-bottom: 24px; overflow-x: auto;
 }
 .tab-btn {
@@ -131,10 +130,10 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.4); }
   font-size: .75rem; font-weight: 500; cursor: pointer;
   transition: all .15s; white-space: nowrap; position: relative;
 }
-.tab-btn:hover { color: var(--text-secondary); background: rgba(255,255,255,.025); }
+.tab-btn:hover { color: var(--text-secondary); background: rgba(0,0,0,.04); }
 .tab-btn.active {
-  background: var(--bg-elevated); color: var(--accent-text);
-  border-color: var(--border-bright);
+  background: var(--bg-card); color: var(--accent-text);
+  border-color: var(--border); box-shadow: 0 1px 3px rgba(0,0,0,.06);
 }
 .tab-btn.active::before {
   content: ''; position: absolute; left: 0; top: 4px; bottom: 4px;
@@ -185,12 +184,12 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.4); }
   font-family: var(--font-mono); font-size: .75rem; font-weight: 500;
   transition: all .15s; cursor: pointer; border: 1px solid transparent;
 }
-.btn-primary { background: var(--accent-glow); border-color: rgba(201,145,58,.3); color: var(--accent-text); }
-.btn-primary:hover { background: rgba(201,145,58,.2); border-color: var(--accent); }
+.btn-primary { background: var(--accent-glow); border-color: rgba(176,120,48,.3); color: var(--accent-text); }
+.btn-primary:hover { background: rgba(176,120,48,.18); border-color: var(--accent); }
 .btn-ghost { background: transparent; border-color: var(--border); color: var(--text-secondary); }
 .btn-ghost:hover { border-color: var(--border-bright); color: var(--text-primary); }
-.btn-danger { background: rgba(204,80,40,.1); border-color: rgba(204,80,40,.2); color: #E07050; }
-.btn-danger:hover { background: rgba(204,80,40,.2); }
+.btn-danger { background: rgba(184,58,32,.08); border-color: rgba(184,58,32,.2); color: #B83A20; }
+.btn-danger:hover { background: rgba(184,58,32,.15); }
 .btn-sm { padding: 3px 9px; font-size: .68rem; }
 .btn-xs { padding: 2px 6px; font-size: .62rem; }
 
@@ -200,10 +199,10 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.4); }
   font-weight: 500; letter-spacing: .04em; padding: 2px 7px;
   border-radius: 4px; text-transform: uppercase; vertical-align: middle;
 }
-.tag-amber { background: var(--accent-glow); color: var(--accent-text); border: 1px solid rgba(201,145,58,.2); }
-.tag-green { background: var(--success-bg); color: #7DB87D; border: 1px solid rgba(91,138,91,.2); }
-.tag-red   { background: rgba(204,80,40,.12); color: #E07050; border: 1px solid rgba(204,80,40,.2); }
-.tag-blue  { background: var(--info-bg); color: #6EA8D4; border: 1px solid rgba(71,121,163,.2); }
+.tag-amber { background: var(--accent-glow); color: var(--accent-text); border: 1px solid rgba(176,120,48,.2); }
+.tag-green { background: var(--success-bg); color: #2E7D32; border: 1px solid rgba(46,125,50,.2); }
+.tag-red   { background: rgba(184,58,32,.08); color: #B83A20; border: 1px solid rgba(184,58,32,.2); }
+.tag-blue  { background: var(--info-bg); color: #1A4A82; border: 1px solid rgba(26,74,130,.2); }
 .tag-ghost { background: transparent; color: var(--text-tertiary); border: 1px solid var(--border); }
 
 /* ── INPUTS ──────────────────────────────────────── */
@@ -228,9 +227,9 @@ select.input { cursor: pointer; }
   background: linear-gradient(90deg, var(--accent) 0%, transparent 70%);
   transition: background .3s;
 }
-.countdown-card.warn  { border-color: rgba(196,124,37,.35); }
+.countdown-card.warn  { border-color: rgba(196,124,37,.4); }
 .countdown-card.warn::before  { background: linear-gradient(90deg, var(--urgent-mid) 0%, transparent 70%); }
-.countdown-card.urgent { border-color: rgba(204,80,40,.35); }
+.countdown-card.urgent { border-color: rgba(184,58,32,.4); }
 .countdown-card.urgent::before { background: linear-gradient(90deg, var(--urgent) 0%, transparent 70%); }
 .cd-icon {
   width: 30px; height: 30px; border-radius: 7px;
@@ -239,11 +238,11 @@ select.input { cursor: pointer; }
 }
 .cd-num {
   font-family: var(--font-display); font-size: 3rem; font-weight: 800;
-  line-height: 1; letter-spacing: -.03em; color: var(--accent-text);
+  line-height: 1; letter-spacing: -.03em; color: var(--accent);
   transition: color .3s;
 }
-.countdown-card.warn  .cd-num { color: #D4975A; }
-.countdown-card.urgent .cd-num { color: #E07060; animation: cpulse 2s ease-in-out infinite; }
+.countdown-card.warn  .cd-num { color: var(--urgent-mid); }
+.countdown-card.urgent .cd-num { color: var(--urgent); animation: cpulse 2s ease-in-out infinite; }
 @keyframes cpulse { 0%,100%{opacity:1} 50%{opacity:.55} }
 .cd-lbl {
   font-family: var(--font-mono); font-size: .65rem; letter-spacing: .07em;
@@ -258,7 +257,10 @@ select.input { cursor: pointer; }
 .focus-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: .85rem; }
 .focus-title { font-family: var(--font-display); font-size: .95rem; font-weight: 700; color: var(--text-primary); }
 .focus-date  { font-family: var(--font-mono); font-size: .62rem; color: var(--text-tertiary); }
-.focus-item  { display: flex; align-items: center; gap: 10px; padding: .42rem 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+.focus-item  {
+  display: flex; align-items: center; gap: 10px;
+  padding: .42rem 0; border-bottom: 1px solid var(--border); cursor: pointer;
+}
 .focus-item:last-of-type { border-bottom: none; }
 .f-check {
   width: 17px; height: 17px; border-radius: 4px;
@@ -266,25 +268,10 @@ select.input { cursor: pointer; }
   align-items: center; justify-content: center; font-size: 9px;
   flex-shrink: 0; transition: all .2s cubic-bezier(.34,1.56,.64,1);
 }
-.focus-item.done .f-check { background: var(--success-bg); border-color: var(--success); color: #7DB87D; transform: scale(1.08); }
+.focus-item.done .f-check { background: var(--success-bg); border-color: var(--success); color: var(--success); transform: scale(1.08); }
 .focus-item.done .f-lbl   { text-decoration: line-through; color: var(--text-tertiary); }
 .f-lbl  { font-family: var(--font-mono); font-size: .8rem; color: var(--text-primary); flex: 1; }
 .focus-add { display: flex; gap: 6px; margin-top: .7rem; }
-
-/* ── HEATMAP ─────────────────────────────────────── */
-.heatmap-card {
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: var(--r-lg); padding: 1.1rem 1.25rem;
-}
-.heat-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: .55rem; }
-.heat-pill {
-  font-family: var(--font-mono); font-size: .67rem; font-weight: 500;
-  padding: 3px 8px; border-radius: 4px; cursor: default;
-}
-.heat-0 { background: transparent; color: var(--text-tertiary); border: 1px solid var(--border); }
-.heat-1 { background: rgba(196,124,37,.14); color: #D49558; border: 1px solid rgba(196,124,37,.22); }
-.heat-2 { background: rgba(204,80,40,.14); color: #E07060; border: 1px solid rgba(204,80,40,.22); }
-.heat-3 { background: rgba(204,80,40,.24); color: #E87055; border: 1px solid rgba(204,80,40,.32); }
 
 /* ── CHART ───────────────────────────────────────── */
 .chart-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 1.25rem; }
@@ -301,7 +288,7 @@ select.input { cursor: pointer; }
   padding: 1rem 1.25rem; background: var(--bg-card);
   border: 1px solid var(--border); border-radius: var(--r-lg); margin-bottom: 14px;
 }
-.ring-stats .ring-main { font-family: var(--font-display); font-size: 1.4rem; font-weight: 800; color: var(--accent-text); }
+.ring-stats .ring-main { font-family: var(--font-display); font-size: 1.4rem; font-weight: 800; color: var(--accent); }
 .ring-stats .ring-sub  { font-family: var(--font-mono); font-size: .62rem; color: var(--text-tertiary); }
 .ring-stats .ring-pct  { font-family: var(--font-mono); font-size: .72rem; color: var(--text-secondary); margin-top: .15rem; }
 
@@ -313,14 +300,14 @@ select.input { cursor: pointer; }
   border: 1px solid transparent; cursor: pointer; transition: all .15s;
 }
 .topic-row:hover { background: var(--bg-elevated); border-color: var(--border); }
-.topic-row.done { opacity: .52; }
+.topic-row.done { opacity: .55; }
 .topic-row.done .topic-name { text-decoration: line-through; color: var(--text-tertiary); }
 .t-check {
   width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--border-bright);
   display: flex; align-items: center; justify-content: center; font-size: 10px;
   flex-shrink: 0; transition: all .22s cubic-bezier(.34,1.56,.64,1);
 }
-.topic-row.done .t-check { background: var(--success-bg); border-color: var(--success); color: #7DB87D; transform: scale(1.06); }
+.topic-row.done .t-check { background: var(--success-bg); border-color: var(--success); color: var(--success); transform: scale(1.06); }
 .topic-name { font-family: var(--font-mono); font-size: .82rem; flex: 1; color: var(--text-primary); }
 .topic-del  { background: transparent; border: none; color: transparent; font-size: .8rem; padding: 0 3px; transition: color .15s; }
 .topic-row:hover .topic-del { color: var(--text-tertiary); }
@@ -348,7 +335,7 @@ select.input { cursor: pointer; }
   border: 1px solid var(--border); border-radius: var(--r-sm); margin-bottom: 6px;
 }
 .ae-name  { font-family: var(--font-mono); font-size: .82rem; color: var(--text-primary); }
-.ae-score { font-family: var(--font-mono); font-size: .9rem; font-weight: 600; color: var(--accent-text); }
+.ae-score { font-family: var(--font-mono); font-size: .9rem; font-weight: 600; color: var(--accent); }
 .ae-date  { font-family: var(--font-mono); font-size: .65rem; color: var(--text-tertiary); }
 .ae-del   { background: transparent; border: none; color: var(--text-tertiary); cursor: pointer; font-size: .85rem; transition: color .15s; }
 .ae-del:hover { color: var(--urgent); }
@@ -373,17 +360,32 @@ select.input { cursor: pointer; }
 .mq-topic { font-family: var(--font-mono); font-size: .8rem; font-weight: 500; color: var(--text-primary); }
 .mq-field { font-family: var(--font-mono); font-size: .6rem; letter-spacing: .08em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: .18rem; }
 .mq-val   { font-size: .84rem; color: var(--text-secondary); line-height: 1.55; margin-bottom: .55rem; }
-.mq-correct-box { background: rgba(201,145,58,.08); border: 1px solid rgba(201,145,58,.18); border-radius: var(--r-sm); padding: .55rem .82rem; }
+.mq-correct-box { background: var(--accent-glow); border: 1px solid rgba(176,120,48,.18); border-radius: var(--r-sm); padding: .55rem .82rem; }
 .mq-correct-box .mq-field { color: var(--accent-text); }
 .mq-correct-box .mq-val   { color: var(--text-primary); margin-bottom: 0; }
 .mq-add-btn-row { padding: .65rem 1.1rem; background: var(--bg-subtle); }
+
+/* ── INLINE ENTRY FORM ───────────────────────────── */
+.inline-entry-form {
+  background: var(--bg-subtle); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 1rem 1.1rem; margin: .5rem 1.1rem 1rem;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.inline-entry-form .form-row { display: flex; gap: 8px; align-items: flex-start; }
+.inline-entry-form .form-row.stack { flex-direction: column; }
+.inline-entry-form label {
+  font-family: var(--font-mono); font-size: .6rem; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 3px; display: block;
+}
+.inline-entry-form textarea.input { min-height: 60px; resize: vertical; }
+.form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 
 /* ── NOTES ───────────────────────────────────────── */
 .notes-tb { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
 .arch-badge {
   display: inline-flex; align-items: center; justify-content: center;
   width: 17px; height: 17px; border-radius: 50%;
-  background: var(--accent); color: var(--bg-base);
+  background: var(--accent); color: #fff;
   font-size: .58rem; font-weight: 700; margin-left: 4px;
 }
 .note-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; margin-bottom: 14px; }
@@ -418,7 +420,7 @@ select.input { cursor: pointer; }
 .fmt-btn:hover { border-color: var(--border-bright); color: var(--text-primary); }
 .clr-dot {
   width: 13px; height: 13px; border-radius: 50%; cursor: pointer;
-  border: 1px solid rgba(255,255,255,.1); transition: transform .15s; flex-shrink: 0;
+  border: 1px solid rgba(0,0,0,.12); transition: transform .15s; flex-shrink: 0;
 }
 .clr-dot:hover { transform: scale(1.3); }
 .tb-sep { width: 1px; height: 15px; background: var(--border); margin: 0 2px; }
@@ -435,7 +437,7 @@ select.input { cursor: pointer; }
 /* ── ARCHIVE MODAL ───────────────────────────────── */
 .modal-ov {
   display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,.72); z-index: 100;
+  background: rgba(0,0,0,.45); z-index: 100;
   align-items: center; justify-content: center;
 }
 .modal-ov.open { display: flex; }
@@ -460,20 +462,20 @@ select.input { cursor: pointer; }
 /* ── COMMAND PALETTE ─────────────────────────────── */
 #cmd-ov {
   display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,.75); z-index: 200;
+  background: rgba(0,0,0,.45); z-index: 200;
   align-items: flex-start; justify-content: center; padding-top: 14vh;
 }
 #cmd-ov.open { display: flex; }
 #cmd-box {
-  background: #0E0C09; border: 1px solid var(--border-bright);
+  background: var(--bg-card); border: 1px solid var(--border-bright);
   border-radius: var(--r-lg); width: 100%; max-width: 540px;
-  box-shadow: 0 28px 70px rgba(0,0,0,.65); overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0,0,0,.15); overflow: hidden;
 }
 #cmd-in-row {
   display: flex; align-items: center; gap: 10px;
   padding: .82rem 1.1rem; border-bottom: 1px solid var(--border);
 }
-#cmd-icon { color: var(--accent-text); font-size: 1rem; }
+#cmd-icon { color: var(--accent); font-size: 1rem; }
 #cmd-input {
   flex: 1; background: transparent; border: none; outline: none;
   font-family: var(--font-mono); font-size: .85rem; color: var(--text-primary);
@@ -497,13 +499,14 @@ select.input { cursor: pointer; }
 /* ── CONFIRM DIALOG ──────────────────────────────── */
 #confirm-ov {
   display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,.65); z-index: 300;
+  background: rgba(0,0,0,.4); z-index: 300;
   align-items: center; justify-content: center;
 }
 #confirm-ov.open { display: flex; }
 #confirm-box {
   background: var(--bg-card); border: 1px solid var(--border-bright);
   border-radius: var(--r-lg); padding: 1.5rem; max-width: 380px; width: 94%;
+  box-shadow: 0 10px 30px rgba(0,0,0,.12);
 }
 #confirm-msg { color: var(--text-secondary); font-size: .9rem; margin-bottom: 1.25rem; line-height: 1.55; }
 #confirm-acts { display: flex; gap: 8px; justify-content: flex-end; }
@@ -521,20 +524,59 @@ select.input { cursor: pointer; }
 
 <!-- AUTH -->
 <div id="auth-screen">
-  <div style="text-align:center">
-    <div class="auth-eyebrow">USMLE Prep</div>
+  <div style="text-align:center;width:100%;max-width:520px">
+    <div style="font-family:var(--font-mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:1rem">USMLE Prep</div>
     <div class="auth-title">Step <span>2</span></div>
-    <div class="auth-sub">Sign in to load your study data</div>
+    <div style="font-family:var(--font-display);font-size:1.1rem;font-weight:300;color:var(--text-secondary);margin:.4rem 0 1.5rem">Welcome back, Thomas Costner</div>
     <button id="sign-in-btn" onclick="handleSignIn()">Sign in with Google</button>
+    <div id="quote-block" style="margin-top:2.8rem;padding:0 1.5rem">
+      <div id="quote-text" style="font-family:var(--font-display);font-style:italic;font-size:1.05rem;color:var(--text-secondary);line-height:1.75;min-height:4rem;transition:opacity .6s ease"></div>
+      <div id="quote-attr" style="font-family:var(--font-mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);margin-top:.7rem;transition:opacity .6s ease"></div>
+    </div>
   </div>
 </div>
+<script>
+(function(){
+  const quotes = [
+    { text: "The difference between the impossible and the possible lies in a person's determination.", attr: "Tommy Lasorda" },
+    { text: "You have to fight to reach your dream. You have to sacrifice and work hard for it.", attr: "Lionel Messi" },
+    { text: "Hard work beats talent when talent doesn't work hard.", attr: "Tim Notke" },
+    { text: "Champions aren't made in the gyms. Champions are made from something they have deep inside them — a desire, a dream, a vision.", attr: "Muhammad Ali" },
+    { text: "Don't wish it were easier. Wish you were better.", attr: "Jim Rohn" },
+    { text: "The more I practice, the luckier I get.", attr: "Gary Player" },
+    { text: "It's not whether you get knocked down; it's whether you get up.", attr: "Vince Lombardi" },
+    { text: "The pain you feel today will be the strength you feel tomorrow.", attr: "" },
+    { text: "Obsessed is a word the lazy use to describe the dedicated.", attr: "" },
+    { text: "You don't get what you wish for. You get what you work for.", attr: "" },
+    { text: "Somewhere someone is working harder than you. Don't let them win.", attr: "" },
+    { text: "Outwork everyone. Every single day.", attr: "" },
+    { text: "The best never rest.", attr: "" },
+    { text: "Success is the sum of small efforts repeated day in and day out.", attr: "Robert Collier" },
+    { text: "Excellence is not a destination but a continuous journey that never ends.", attr: "" },
+  ];
+  let idx = Math.floor(Math.random() * quotes.length);
+  function showQuote(i) {
+    const qt = document.getElementById('quote-text');
+    const qa = document.getElementById('quote-attr');
+    if (!qt || !qa) return;
+    qt.style.opacity = '0'; qa.style.opacity = '0';
+    setTimeout(() => {
+      qt.textContent = '\u201C' + quotes[i].text + '\u201D';
+      qa.textContent = '— ' + (quotes[i].attr || 'Anonymous');
+      qt.style.opacity = '1'; qa.style.opacity = '1';
+    }, 600);
+  }
+  showQuote(idx);
+  setInterval(() => { idx = (idx + 1) % quotes.length; showQuote(idx); }, 15000);
+})();
+</script>
 
 <!-- APP -->
 <div id="app">
   <div class="app-header">
     <div class="header-left">
       <div class="app-title">Step <span>2</span></div>
-      <div class="app-subtitle">Study Dashboard</div>
+      <div class="app-subtitle">Thomas Costner · Study Dashboard</div>
     </div>
     <div class="header-right">
       <div id="save-status"><div id="save-dot"></div><span id="save-lbl">–</span></div>
@@ -550,86 +592,11 @@ select.input { cursor: pointer; }
     <button class="tab-btn" onclick="showTab('notes')" id="btn-notes">Notes<span class="tab-shortcut">⌘5</span></button>
   </div>
 
-  <!-- DASHBOARD -->
-  <div id="tab-dashboard" class="tab-panel active">
-    <div class="card-grid">
-      <div id="csse-card" class="countdown-card">
-        <div class="cd-icon">📅</div>
-        <div class="cd-num" id="css-days">–</div>
-        <div class="cd-lbl">Days until CSSE</div>
-      </div>
-      <div id="step-card" class="countdown-card">
-        <div class="cd-icon">🎯</div>
-        <div class="cd-num" id="step-days">–</div>
-        <div class="cd-lbl">Days until Step 2</div>
-      </div>
-    </div>
+  <!-- DASHBOARD (rebuilt by app.js) -->
+  <div id="tab-dashboard" class="tab-panel active"></div>
 
-    <div class="card-grid">
-      <div class="focus-card">
-        <div class="focus-hdr">
-          <div class="focus-title">Today's Focus</div>
-          <div class="focus-date" id="focus-date-lbl"></div>
-        </div>
-        <div id="focus-items"></div>
-        <div class="focus-add">
-          <select class="input" id="focus-sel" style="flex:1"><option value="">Add topic…</option></select>
-          <button class="btn btn-primary btn-sm" onclick="addFocusTopic()">Add</button>
-        </div>
-      </div>
-
-      <div class="heatmap-card">
-        <div class="section-label">Weak Spots</div>
-        <div style="font-size:.82rem;color:var(--text-secondary)">Missed questions by topic</div>
-        <div class="heat-pills" id="heat-pills"></div>
-        <div style="font-family:var(--font-mono);font-size:.58rem;color:var(--text-tertiary);margin-top:.6rem">More red = more missed</div>
-      </div>
-    </div>
-
-    <div class="chart-card">
-      <div class="chart-hdr">
-        <div class="chart-title">Score Trajectory</div>
-        <div class="chart-legend">
-          <div class="chart-legend-item"><div class="chart-dot" style="background:#5B8A5B"></div>≥90</div>
-          <div class="chart-legend-item"><div class="chart-dot" style="background:#C9913A"></div>≥80</div>
-          <div class="chart-legend-item"><div class="chart-dot" style="background:#CC5028"></div>&lt;80</div>
-          <div class="chart-legend-item"><div class="chart-dot" style="border:1px dashed #4779A3;background:transparent"></div>Goal</div>
-        </div>
-      </div>
-      <canvas id="shelf-chart"></canvas>
-    </div>
-  </div>
-
-  <!-- TOPICS -->
-  <div id="tab-topics" class="tab-panel">
-    <div class="progress-bar-card">
-      <svg width="58" height="58" viewBox="0 0 58 58" style="flex-shrink:0">
-        <circle cx="29" cy="29" r="23" fill="none" stroke="var(--border)" stroke-width="5"/>
-        <circle id="ring-arc" cx="29" cy="29" r="23" fill="none" stroke="var(--accent)" stroke-width="5"
-          stroke-dasharray="144.5" stroke-dashoffset="144.5" stroke-linecap="round"
-          transform="rotate(-90 29 29)" style="transition:stroke-dashoffset .5s ease"/>
-      </svg>
-      <div class="ring-stats">
-        <div class="ring-main" id="ring-frac">0 / 12</div>
-        <div class="ring-sub">topics completed</div>
-        <div class="ring-pct" id="ring-pct">0%</div>
-      </div>
-    </div>
-    <div class="topic-list" id="topics-list"></div>
-    <div class="add-topic-row">
-      <input class="input" id="new-topic-inp" placeholder="Add custom topic…" style="flex:1" onkeydown="if(event.key==='Enter')addCustomTopic()">
-      <button class="btn btn-ghost btn-sm" onclick="addCustomTopic()">Add</button>
-    </div>
-    <div class="resources-section">
-      <div class="section-label">Resources</div>
-      <div class="section-heading">My List</div>
-      <div id="res-list"></div>
-      <div class="add-res-row">
-        <input class="input" id="new-res-inp" placeholder="Add resource or link…" style="flex:1" onkeydown="if(event.key==='Enter')addResource()">
-        <button class="btn btn-ghost btn-sm" onclick="addResource()">Add</button>
-      </div>
-    </div>
-  </div>
+  <!-- TOPICS (rebuilt by app.js) -->
+  <div id="tab-topics" class="tab-panel"></div>
 
   <!-- ASSESSMENTS -->
   <div id="tab-assessments" class="tab-panel">
@@ -637,8 +604,8 @@ select.input { cursor: pointer; }
       <div class="section-label">NBME Self Assessments</div>
       <div id="nbme-list"></div>
       <div class="new-assess-row">
-        <select class="input" id="nbme-form-sel"><option value="">Select form…</option></select>
-        <input class="input" type="number" id="nbme-score-inp" placeholder="Score" min="1" max="300" style="max-width:90px">
+        <input class="input" id="nbme-form-inp" placeholder="Form name (e.g. Form 9)…" style="flex:2">
+        <input class="input" type="text" id="nbme-score-inp" placeholder="Score" style="max-width:90px">
         <input class="input" type="date" id="nbme-date-inp" style="max-width:145px">
         <button class="btn btn-primary btn-sm" onclick="addNBMEScore()">Add</button>
       </div>
@@ -648,7 +615,7 @@ select.input { cursor: pointer; }
       <div id="cms-list"></div>
       <div class="new-assess-row">
         <input class="input" id="cms-name-inp" placeholder="Form name…" style="flex:2">
-        <input class="input" type="number" id="cms-score-inp" placeholder="Score (0–100)" min="0" max="100" style="max-width:120px">
+        <input class="input" type="text" id="cms-score-inp" placeholder="Score (0–100)" style="max-width:120px">
         <input class="input" type="date" id="cms-date-inp" style="max-width:145px">
         <button class="btn btn-primary btn-sm" onclick="addCMSScore()">Add</button>
       </div>
@@ -676,16 +643,16 @@ select.input { cursor: pointer; }
   </div>
 </div>
 
-<!-- ARCHIVE MODAL -->
+<!-- ARCHIVE MODAL (notes + topics share this) -->
 <div id="arch-modal" class="modal-ov" onclick="if(event.target===this)closeArchiveModal()">
   <div class="modal-box">
     <div class="modal-hdr">
-      <div class="modal-title">Archived Notes</div>
+      <div class="modal-title" id="arch-modal-title">Archived Notes</div>
       <button class="modal-close" onclick="closeArchiveModal()">×</button>
     </div>
     <div class="modal-body">
       <div id="arch-list"></div>
-      <div id="arch-empty" class="modal-empty" style="display:none">No archived notes yet.</div>
+      <div id="arch-empty" class="modal-empty" style="display:none">Nothing archived yet.</div>
     </div>
   </div>
 </div>
@@ -695,7 +662,7 @@ select.input { cursor: pointer; }
   <div id="cmd-box">
     <div id="cmd-in-row">
       <span id="cmd-icon">⌘</span>
-      <input id="cmd-input" placeholder="Jump to tab, search notes, search missed…" autocomplete="off"
+      <input id="cmd-input" placeholder="Jump to tab, search notes…" autocomplete="off"
         oninput="filterCmds()" onkeydown="cmdKey(event)">
       <span id="cmd-hint">ESC</span>
     </div>

@@ -81,15 +81,10 @@ window.onload = function () {
       client_id: CLIENT_ID,
       scope: SCOPES,
       callback: async (resp) => {
-        if (resp.error) {
-          console.log('GIS:', resp.error);
-          return;
-        }
-
+        if (resp.error) { console.log('GIS:', resp.error); return; }
         gapi.client.setToken({ access_token: resp.access_token });
         document.getElementById('auth-screen').style.display = 'none';
         document.getElementById('app').classList.add('visible');
-
         await loadFromDrive();
         normalizeState();
         renderAll();
@@ -122,7 +117,6 @@ async function loadFromDrive() {
   try {
     const doc = await gapi.client.docs.documents.get({ documentId: DOC_ID });
     let text = '';
-
     for (const el of (doc.result.body.content || [])) {
       if (el.paragraph) {
         for (const run of (el.paragraph.elements || [])) {
@@ -130,16 +124,12 @@ async function loadFromDrive() {
         }
       }
     }
-
     const trimmed = text.trim();
-
     if (trimmed) {
       const loaded = JSON.parse(trimmed);
       state = Object.assign({}, state, loaded);
     }
-  } catch(e) {
-    console.warn('Load error:', e);
-  }
+  } catch(e) { console.warn('Load error:', e); }
 }
 
 function scheduleSave() {
@@ -150,36 +140,17 @@ function scheduleSave() {
 
 async function saveToDrive() {
   if (!gapi.client.getToken()) return;
-
   try {
     const doc = await gapi.client.docs.documents.get({ documentId: DOC_ID });
-    const lastIndex = doc.result.body.content.reduce((m, el) => el.endIndex ? Math.max(m, el.endIndex) : m, 1);
-
+    const lastIndex = doc.result.body.content.reduce(
+      (m, el) => el.endIndex ? Math.max(m, el.endIndex) : m, 1
+    );
     const requests = [];
-
     if (lastIndex > 1) {
-      requests.push({
-        deleteContentRange: {
-          range: {
-            startIndex: 1,
-            endIndex: lastIndex - 1
-          }
-        }
-      });
+      requests.push({ deleteContentRange:{ range:{ startIndex:1, endIndex:lastIndex-1 }}});
     }
-
-    requests.push({
-      insertText: {
-        location: { index: 1 },
-        text: JSON.stringify(state)
-      }
-    });
-
-    await gapi.client.docs.documents.batchUpdate({
-      documentId: DOC_ID,
-      resource: { requests }
-    });
-
+    requests.push({ insertText:{ location:{ index:1 }, text: JSON.stringify(state) }});
+    await gapi.client.docs.documents.batchUpdate({ documentId: DOC_ID, resource:{ requests }});
     setSaveDot('saved');
     const lbl = document.getElementById('save-lbl');
     if (lbl) lbl.textContent = 'Saved ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
@@ -189,11 +160,10 @@ async function saveToDrive() {
   }
 }
 
-function setSaveDot(stateName) {
+function setSaveDot(st) {
   const dot = document.getElementById('save-dot');
   const lbl = document.getElementById('save-lbl');
   if (!dot) return;
-
   dot.className = '';
 
   if (stateName === 'saving') {
@@ -405,7 +375,6 @@ function injectStyles() {
       .score-mini-grid { grid-template-columns:1fr 1fr 1fr; }
     }
   `;
-
   document.head.appendChild(style);
 }
 
@@ -612,24 +581,12 @@ function showTab(tab) {
 
 function globalKeyDown(e) {
   const isMeta = e.metaKey || e.ctrlKey;
-
   if (isMeta && !e.shiftKey && !e.altKey) {
     const tabs = ['dashboard','topics','assessments','missed','notes','suggestions'];
     const n = parseInt(e.key) - 1;
-
-    if (n >= 0 && n < tabs.length) {
-      e.preventDefault();
-      showTab(tabs[n]);
-      return;
-    }
-
-    if (e.key === 'k') {
-      e.preventDefault();
-      openCmdPalette();
-      return;
-    }
+    if (n >= 0 && n < tabs.length) { e.preventDefault(); showTab(tabs[n]); return; }
+    if (e.key === 'k') { e.preventDefault(); openCmdPalette(); return; }
   }
-
   if (e.key === 'Escape') {
     closeCmdPalette();
     closeArchiveModal();
@@ -637,7 +594,7 @@ function globalKeyDown(e) {
   }
 }
 
-// ── Countdown + Calendar ──────────────────────────────────
+// ── Countdown ─────────────────────────────────────────────
 function daysUntil(dateStr) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -656,7 +613,6 @@ function updateCountdown() {
 
   if (cssEl) cssEl.textContent = cssD;
   if (stepEl) stepEl.textContent = stepD;
-
   function urgency(card, days) {
     if (!card) return;
     card.classList.remove('warn','urgent');
@@ -670,13 +626,13 @@ function updateCountdown() {
 
 function renderCalendar() {
   seedCalendarItems();
-
   const list = document.getElementById('calendar-list');
   if (!list) return;
-
   list.innerHTML = '';
 
-  const items = [...(state.calendarItems || [])].sort((a,b) => (a.date || '').localeCompare(b.date || ''));
+  const sorted = [...(state.calendarItems || [])].sort((a,b) =>
+    (a.date || '').localeCompare(b.date || '')
+  );
 
   items.forEach(item => {
     const idx = state.calendarItems.indexOf(item);
@@ -685,11 +641,14 @@ function renderCalendar() {
 
     row.className = 'calendar-row';
     row.innerHTML = `
+      <span class="cal-drag" title="Drag to reorder">⠿</span>
       <div class="calendar-name">${escH(item.name || 'Untitled')}</div>
-      <div class="calendar-date">${item.date || ''}${item.date ? ` · ${days}d` : ''}</div>
-      ${item.locked ? '<span class="tag tag-ghost" style="font-size:.55rem">fixed</span>' : `<button class="calendar-del" onclick="removeCalendarItem(${idx})">×</button>`}
+      <div class="calendar-date">${fmtCalDate(item.date)}${days !== null ? ' · ' + days + 'd' : ''}</div>
+      ${item.locked
+        ? '<span class="tag tag-ghost" style="font-size:.52rem">fixed</span>'
+        : `<button class="calendar-del" onclick="removeCalendarItem(${idx})" title="Remove">×</button>`
+      }
     `;
-
     list.appendChild(row);
   });
 }
@@ -702,24 +661,20 @@ function addCalendarItem() {
 
   const name = nameInp.value.trim();
   const date = dateInp.value;
-
   if (!name || !date) return;
 
   state.calendarItems.push({ name, date, locked:false });
 
   nameInp.value = '';
   dateInp.value = '';
-
   renderCalendar();
   scheduleSave();
 }
 
 async function removeCalendarItem(i) {
   if (!state.calendarItems || !state.calendarItems[i]) return;
-
   const ok = await confirm2('Remove "' + state.calendarItems[i].name + '" from the calendar?');
   if (!ok) return;
-
   state.calendarItems.splice(i, 1);
   renderCalendar();
   scheduleSave();
@@ -735,48 +690,37 @@ function renderFocusPanel() {
   if (!state.todayFocus || state.todayFocus.date !== today) {
     state.todayFocus = { date: today, items: [] };
   }
-
   const container = document.getElementById('focus-items');
   if (!container) return;
-
   container.innerHTML = '';
-
   if (!state.todayFocus.items.length) {
     container.innerHTML = '<div class="focus-empty">No focus items yet</div>';
     return;
   }
-
   state.todayFocus.items.forEach((item, i) => {
     const div = document.createElement('div');
-
     div.className = 'focus-item' + (item.done ? ' done' : '');
     div.onclick = () => toggleFocusItem(i);
-
     div.innerHTML = `
       <div class="f-check">${item.done ? '✓' : ''}</div>
       <div class="f-lbl">${escH(item.topic)}</div>
       <button class="focus-del" onclick="event.stopPropagation();removeFocusItem(${i})">×</button>
     `;
-
     container.appendChild(div);
   });
 }
 
 function addFocusTopic() {
-  const inp = document.getElementById('focus-text-inp');
+  const inp   = document.getElementById('focus-text-inp');
   const topic = inp ? inp.value.trim() : '';
-
   if (!topic) return;
-
   const today = new Date().toISOString().slice(0,10);
-
   if (!state.todayFocus || state.todayFocus.date !== today) {
     state.todayFocus = { date: today, items: [] };
   }
 
   state.todayFocus.items.push({ topic, done:false });
   inp.value = '';
-
   renderFocusPanel();
   scheduleSave();
 }
@@ -831,17 +775,17 @@ function topicMatchesSearch(topic) {
 
 function renderDashboardTopics() {
   const container = document.getElementById('dashboard-topic-mini');
-  const frac = document.getElementById('mini-topic-frac');
-  const fill = document.getElementById('mini-progress-fill');
-
+  const frac      = document.getElementById('mini-topic-frac');
+  const fill      = document.getElementById('mini-progress-fill');
   if (!container) return;
-
   container.innerHTML = '';
 
   const allTopics = getAllTopics();
   const done = allTopics.filter(t => state.topics[t]).length;
   const total = allTopics.length;
-  const pct = total ? Math.round((done / total) * 100) : 0;
+  const pct   = total ? Math.round((done / total) * 100) : 0;
+  if (frac) frac.textContent = done + ' / ' + total + ' · ' + pct + '%';
+  if (fill) fill.style.width = pct + '%';
 
   if (frac) frac.textContent = done + ' / ' + total + ' · ' + pct + '%';
   if (fill) fill.style.width = pct + '%';
@@ -859,17 +803,14 @@ function renderDashboardTopics() {
     const hasNote = !!(state.topicNotes[topic] || '').trim();
 
     const row = document.createElement('div');
-
     row.className = 'mini-topic-row' + (isDone ? ' done' : '');
     row.onclick = () => toggleTopic(topic);
-
     row.innerHTML = `
       <div class="mini-topic-check">${isDone ? '✓' : ''}</div>
       <div class="mini-topic-name">${escH(topic)}</div>
       ${hasNote ? '<span class="mini-topic-note-mark">note</span>' : ''}
       ${isCustom ? `<button class="mini-topic-del" onclick="event.stopPropagation();removeCustomTopic(${jsStr(topic)})">×</button>` : ''}
     `;
-
     container.appendChild(row);
   });
 }
@@ -879,7 +820,6 @@ function addDashboardTopic() {
   const val = inp ? inp.value.trim() : '';
 
   if (!val) return;
-
   addTopicValue(val);
   inp.value = '';
 }
@@ -887,7 +827,6 @@ function addDashboardTopic() {
 function renderTopics() {
   const container = document.getElementById('topics-list');
   if (!container) return;
-
   container.innerHTML = '';
 
   const allTopics = getAllTopics().filter(topicMatchesFilter).filter(topicMatchesSearch);
@@ -921,16 +860,22 @@ function renderTopics() {
         <textarea class="input topic-note-input" placeholder="Notes for ${escH(topic)}…" oninput="updateTopicNote(${jsStr(topic)}, this.value)">${escH(state.topicNotes[topic] || '')}</textarea>
       </div>
     `;
-
     container.appendChild(row);
   });
+
+  // Update topic archive badge
+  const badge = document.getElementById('topic-arch-badge');
+  if (badge) {
+    const count = (state.archivedTopics || []).length;
+    badge.textContent = count;
+    badge.style.display = count ? 'inline-flex' : 'none';
+  }
 
   updateRing();
 }
 
 function toggleTopic(topic) {
   state.topics[topic] = !state.topics[topic];
-
   renderTopics();
   renderDashboardTopics();
   updateRing();
@@ -959,7 +904,6 @@ function addCustomTopic() {
   const val = inp ? inp.value.trim() : '';
 
   if (!val) return;
-
   addTopicValue(val);
   inp.value = '';
 }
@@ -969,11 +913,57 @@ async function removeCustomTopic(topic) {
 
   const ok = await confirm2('Remove topic "' + topic + '"?');
   if (!ok) return;
+  state.archivedTopics = state.archivedTopics || [];
+  state.archivedTopics.push({ topic, done: !!state.topics[topic], note: state.topicNotes[topic] || '', archivedAt: Date.now() });
+  state.customTopics = state.customTopics.filter(t => t !== topic);
+  delete state.topics[topic];
+  delete state.topicNotes[topic];
+  renderTopics();
+  renderDashboardTopics();
+  updateRing();
+  scheduleSave();
+}
 
+async function removeCustomTopic(topic) {
+  if (TOPICS.includes(topic)) return;
+  const ok = await confirm2('Remove topic "' + topic + '"?');
+  if (!ok) return;
   state.customTopics = state.customTopics.filter(t => t !== topic);
   delete state.topics[topic];
   delete state.topicNotes[topic];
 
+function openTopicArchiveModal() {
+  const modal = document.getElementById('arch-modal');
+  const list  = document.getElementById('arch-list');
+  const empty = document.getElementById('arch-empty');
+  const title = document.getElementById('arch-modal-title');
+  if (!modal) return;
+  if (title) title.textContent = 'Archived Topics';
+  list.innerHTML = '';
+  const arcs = state.archivedTopics || [];
+  empty.style.display = arcs.length ? 'none' : 'block';
+  arcs.forEach((item, i) => {
+    const div = document.createElement('div');
+    div.className = 'arch-note-item';
+    div.innerHTML = `
+      <div class="arch-note-title">${escH(item.topic)}</div>
+      <div style="font-size:.78rem;color:var(--text-tertiary);font-family:var(--font-mono);margin-bottom:.3rem">${new Date(item.archivedAt||0).toLocaleDateString()}</div>
+      <div class="arch-note-acts">
+        <button class="btn btn-ghost btn-xs" onclick="restoreArchivedTopic(${i})">Restore</button>
+        <button class="btn btn-danger btn-xs" onclick="deleteArchivedTopic(${i})">Delete</button>
+      </div>
+    `;
+    list.appendChild(div);
+  });
+  modal.classList.add('open');
+}
+
+function restoreArchivedTopic(i) {
+  const item = state.archivedTopics.splice(i, 1)[0];
+  state.customTopics.push(item.topic);
+  state.topics[item.topic]     = item.done || false;
+  state.topicNotes[item.topic] = item.note || '';
+  closeArchiveModal();
   renderTopics();
   renderDashboardTopics();
   updateRing();
@@ -1136,15 +1126,28 @@ function renderChart() {
 function renderResources() {
   const container = document.getElementById('res-list');
   if (!container) return;
-
   container.innerHTML = '';
-
   (state.resources || []).forEach((res, i) => {
     const div = document.createElement('div');
     div.className = 'resource-item';
     div.innerHTML = `<div class="res-name">${escH(res)}</div><button class="res-del" onclick="removeResource(${i})" title="Remove">×</button>`;
     container.appendChild(div);
   });
+
+  // Badge
+  const badge = document.getElementById('res-arch-badge');
+  if (badge) {
+    const count = (state.archivedResources || []).length;
+    badge.textContent = count;
+    badge.style.display = count ? 'inline-flex' : 'none';
+  }
+}
+
+function toggleResource(i) {
+  if (!state.resources[i]) return;
+  state.resources[i].done = !state.resources[i].done;
+  renderResources();
+  scheduleSave();
 }
 
 function addResource() {
@@ -1163,7 +1166,6 @@ function addResource() {
 async function removeResource(i) {
   const ok = await confirm2('Remove "' + state.resources[i] + '"?');
   if (!ok) return;
-
   state.resources.splice(i, 1);
   renderResources();
   scheduleSave();
@@ -1173,22 +1175,18 @@ async function removeResource(i) {
 function renderNBME() {
   const container = document.getElementById('nbme-list');
   if (!container) return;
-
   container.innerHTML = '';
-
   (state.nbmeScores || []).forEach((s, i) => {
     const div = document.createElement('div');
     div.className = 'assess-entry';
-
-    const scoreClass = s.score >= 260 ? 'tag-green' : s.score >= 240 ? 'tag-amber' : 'tag-red';
-
+    const sc = Number(s.score);
+    const scoreClass = sc >= 260 ? 'tag-green' : sc >= 240 ? 'tag-amber' : 'tag-red';
     div.innerHTML = `
       <div class="ae-name">${escH(s.form)}</div>
       <span class="tag ${scoreClass}">${s.score}</span>
-      <div class="ae-date">${s.date || ''}</div>
+      <div class="ae-date">${s.date ? fmtCalDate(s.date) : ''}</div>
       <button class="ae-del" onclick="removeNBME(${i})" title="Remove">×</button>
     `;
-
     container.appendChild(div);
   });
 }
@@ -1202,11 +1200,9 @@ function addNBMEScore() {
 
   state.nbmeScores.push({ form, score, date });
   state.nbmeScores.sort((a,b) => (a.date || '') < (b.date || '') ? -1 : 1);
-
-  document.getElementById('nbme-form-sel').value = '';
+  document.getElementById('nbme-form-inp').value  = '';
   document.getElementById('nbme-score-inp').value = '';
-  document.getElementById('nbme-date-inp').value = '';
-
+  document.getElementById('nbme-date-inp').value  = '';
   renderNBME();
   renderChart();
   scheduleSave();
@@ -1215,7 +1211,6 @@ function addNBMEScore() {
 async function removeNBME(i) {
   const ok = await confirm2('Remove this NBME score?');
   if (!ok) return;
-
   state.nbmeScores.splice(i, 1);
   renderNBME();
   renderChart();
@@ -1225,20 +1220,16 @@ async function removeNBME(i) {
 function renderCMS() {
   const container = document.getElementById('cms-list');
   if (!container) return;
-
   container.innerHTML = '';
-
   (state.cmsScores || []).forEach((s, i) => {
     const div = document.createElement('div');
     div.className = 'assess-entry';
-
     div.innerHTML = `
       <div class="ae-name">${escH(s.name)}</div>
       <div class="ae-score">${s.score}</div>
-      <div class="ae-date">${s.date || ''}</div>
+      <div class="ae-date">${s.date ? fmtCalDate(s.date) : ''}</div>
       <button class="ae-del" onclick="removeCMS(${i})" title="Remove">×</button>
     `;
-
     container.appendChild(div);
   });
 }
@@ -1254,17 +1245,13 @@ function addCMSScore() {
 
   document.getElementById('cms-name-inp').value = '';
   document.getElementById('cms-score-inp').value = '';
-  document.getElementById('cms-date-inp').value = '';
-
-  renderCMS();
-  renderChart();
-  scheduleSave();
+  document.getElementById('cms-date-inp').value  = '';
+  renderCMS(); renderChart(); scheduleSave();
 }
 
 async function removeCMS(i) {
   const ok = await confirm2('Remove this score?');
   if (!ok) return;
-
   state.cmsScores.splice(i, 1);
   renderCMS();
   renderChart();
@@ -1275,25 +1262,19 @@ async function removeCMS(i) {
 function renderMissedSessions() {
   const container = document.getElementById('sessions-container');
   if (!container) return;
-
   container.innerHTML = '';
-
   let total = 0;
-
   (state.missedSessions || []).forEach((sess, si) => {
     total += (sess.entries || []).length;
-
     const block = document.createElement('div');
     block.className = 'session-block';
     block.id = 'sess-' + si;
-
     const isOpen = !!sess.open;
-
     block.innerHTML = `
       <div class="session-hdr ${isOpen ? 'open' : ''}" onclick="toggleSession(${si})">
         <div class="sess-title">${escH(sess.title || 'Session ' + (si+1))}</div>
         <div class="sess-right">
-          <span class="tag tag-ghost">${(sess.entries || []).length} missed</span>
+          <span class="tag tag-ghost">${(sess.entries||[]).length} missed</span>
           <span class="sess-toggle">▾</span>
         </div>
       </div>
@@ -1303,21 +1284,17 @@ function renderMissedSessions() {
           <button class="btn btn-ghost btn-sm" onclick="addMissedEntry(${si})">+ Add question</button>
           <button class="btn btn-danger btn-sm" style="margin-left:6px" onclick="removeSession(${si})">Remove session</button>
         </div>
+        <div id="entry-form-${si}" style="display:none"></div>
       </div>
     `;
-
     container.appendChild(block);
   });
-
   const lbl = document.getElementById('missed-total-lbl');
   if (lbl) lbl.textContent = total + ' total missed';
 }
 
 function renderEntriesHTML(si, entries) {
-  if (!entries.length) {
-    return '<div style="padding:.6rem 1.1rem;font-family:var(--font-mono);font-size:.72rem;color:var(--text-tertiary)">No entries yet</div>';
-  }
-
+  if (!entries.length) return '<div style="padding:.6rem 1.1rem;font-family:var(--font-mono);font-size:.72rem;color:var(--text-tertiary)">No entries yet</div>';
   return entries.map((e, ei) => `
     <div class="mq-entry">
       <div class="mq-topic-row">
@@ -1333,6 +1310,57 @@ function renderEntriesHTML(si, entries) {
       </div>
     </div>
   `).join('');
+}
+
+function showEntryForm(si) {
+  const container = document.getElementById('entry-form-' + si);
+  if (!container) return;
+  container.style.display = 'block';
+  container.innerHTML = `
+    <div class="inline-entry-form">
+      <div class="form-row">
+        <div style="flex:1">
+          <label>Topic</label>
+          <input class="input" id="ef-topic-${si}" placeholder="e.g. Thyroid storm">
+        </div>
+        <div style="flex:1">
+          <label>Source</label>
+          <input class="input" id="ef-source-${si}" placeholder="e.g. NBME 14, UWorld">
+        </div>
+      </div>
+      <div class="form-row stack">
+        <label>Why did you miss it?</label>
+        <textarea class="input" id="ef-why-${si}" placeholder="Thought it was X, didn't recognize Y…"></textarea>
+      </div>
+      <div class="form-row stack">
+        <label>Correct thinking / what to remember</label>
+        <textarea class="input" id="ef-correct-${si}" placeholder="The key is…"></textarea>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-ghost btn-sm" onclick="hideEntryForm(${si})">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="submitEntryForm(${si})">Save</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('ef-topic-' + si).focus();
+}
+
+function hideEntryForm(si) {
+  const container = document.getElementById('entry-form-' + si);
+  if (container) { container.style.display = 'none'; container.innerHTML = ''; }
+}
+
+function submitEntryForm(si) {
+  const topic   = (document.getElementById('ef-topic-'   + si) || {}).value || '';
+  const source  = (document.getElementById('ef-source-'  + si) || {}).value || '';
+  const why     = (document.getElementById('ef-why-'     + si) || {}).value || '';
+  const correct = (document.getElementById('ef-correct-' + si) || {}).value || '';
+  if (!topic.trim()) return;
+  if (!state.missedSessions[si].entries) state.missedSessions[si].entries = [];
+  state.missedSessions[si].entries.push({ topic: topic.trim(), source: source.trim(), why: why.trim(), correct: correct.trim() });
+  hideEntryForm(si);
+  renderMissedSessions();
+  scheduleSave();
 }
 
 function toggleSession(i) {
@@ -1352,7 +1380,6 @@ function addMissedSession() {
 async function removeSession(i) {
   const ok = await confirm2('Remove session "' + state.missedSessions[i].title + '" and all entries?');
   if (!ok) return;
-
   state.missedSessions.splice(i, 1);
   renderMissedSessions();
   scheduleSave();
@@ -1378,7 +1405,6 @@ function addMissedEntry(si) {
 async function removeMissedEntry(si, ei) {
   const ok = await confirm2('Remove this missed question entry?');
   if (!ok) return;
-
   state.missedSessions[si].entries.splice(ei, 1);
   renderMissedSessions();
   scheduleSave();
@@ -1388,33 +1414,21 @@ async function removeMissedEntry(si, ei) {
 function renderNotes() {
   const container = document.getElementById('notes-container');
   if (!container) return;
-
   container.innerHTML = '';
-
-  const badge = document.getElementById('arch-badge');
+  const badge    = document.getElementById('arch-badge');
   const archCount = (state.archivedNotes || []).length;
-
-  if (badge) {
-    badge.textContent = archCount;
-    badge.style.display = archCount ? 'inline-flex' : 'none';
-  }
-
+  if (badge) { badge.textContent = archCount; badge.style.display = archCount ? 'inline-flex' : 'none'; }
   if (!(state.notes || []).length) {
     container.innerHTML = '<div style="font-family:var(--font-mono);font-size:.78rem;color:var(--text-tertiary);padding:1rem 0">No notes yet. Click + New Note to start.</div>';
     return;
   }
-
-  state.notes.forEach((note, i) => {
-    container.appendChild(buildNoteCard(note, i));
-  });
+  state.notes.forEach((note, i) => container.appendChild(buildNoteCard(note, i)));
 }
 
 function buildNoteCard(note, i) {
   const card = document.createElement('div');
-
   card.className = 'note-card';
   card.id = 'note-' + i;
-
   card.innerHTML = `
     <div class="note-hdr">
       <div class="note-dot saved" id="ndot-${i}"></div>
@@ -1441,34 +1455,24 @@ function buildNoteCard(note, i) {
     </div>
     <div class="note-editor" id="editor-${i}" contenteditable="true" placeholder="Start writing…" onkeydown="noteKeyDown(event,${i})" oninput="noteFieldChange(${i},'body',document.getElementById('editor-${i}').innerHTML)">${note.body || ''}</div>
   `;
-
   return card;
 }
 
 function addNote() {
   state.notes.unshift({ title: '', body: '', created: Date.now() });
   renderNotes();
-
   const firstInp = document.querySelector('.note-title-inp');
   if (firstInp) firstInp.focus();
-
   scheduleSave();
 }
 
 function noteFieldChange(i, field, val) {
   if (!state.notes[i]) return;
-
   state.notes[i][field] = val;
-
   const dot = document.getElementById('ndot-' + i);
   if (dot) dot.className = 'note-dot saving';
-
   scheduleSave();
-
-  setTimeout(() => {
-    const d = document.getElementById('ndot-' + i);
-    if (d) d.className = 'note-dot saved';
-  }, 1600);
+  setTimeout(() => { const d = document.getElementById('ndot-' + i); if (d) d.className = 'note-dot saved'; }, 1600);
 }
 
 function noteKeyDown(e, i) {
@@ -1486,7 +1490,6 @@ function noteKeyDown(e, i) {
 function fmtNote(i, cmd) {
   const ed = document.getElementById('editor-' + i);
   if (!ed) return;
-
   ed.focus();
   document.execCommand(cmd, false, null);
   noteFieldChange(i, 'body', ed.innerHTML);
@@ -1495,7 +1498,6 @@ function fmtNote(i, cmd) {
 function fmtNoteColor(i, color) {
   const ed = document.getElementById('editor-' + i);
   if (!ed) return;
-
   ed.focus();
   document.execCommand('foreColor', false, color);
   noteFieldChange(i, 'body', ed.innerHTML);
@@ -1504,7 +1506,6 @@ function fmtNoteColor(i, color) {
 async function deleteNote(i) {
   const ok = await confirm2('Delete this note permanently?');
   if (!ok) return;
-
   state.notes.splice(i, 1);
   renderNotes();
   scheduleSave();
@@ -1513,30 +1514,25 @@ async function deleteNote(i) {
 function archiveNote(i) {
   state.archivedNotes.push({ ...state.notes[i], archivedAt: Date.now() });
   state.notes.splice(i, 1);
-
-  renderNotes();
-  scheduleSave();
+  renderNotes(); scheduleSave();
 }
 
-// ── Archive Modal ─────────────────────────────────────────
+// ── Archive Modal (shared) ────────────────────────────────
 function openArchiveModal() {
   const modal = document.getElementById('arch-modal');
   if (!modal) return;
 
   const list = document.getElementById('arch-list');
   const empty = document.getElementById('arch-empty');
-
+  const title = document.getElementById('arch-modal-title');
+  if (!modal) return;
+  if (title) title.textContent = 'Archived Notes';
   list.innerHTML = '';
-
   const arcs = state.archivedNotes || [];
-
   empty.style.display = arcs.length ? 'none' : 'block';
-
   arcs.forEach((note, i) => {
     const item = document.createElement('div');
-
     item.className = 'arch-note-item';
-
     item.innerHTML = `
       <div class="arch-note-title">${escH(note.title || 'Untitled')}</div>
       <div style="font-size:.78rem;color:var(--text-tertiary);font-family:var(--font-mono);margin-bottom:.3rem">${new Date(note.archivedAt || 0).toLocaleDateString()}</div>
@@ -1545,10 +1541,8 @@ function openArchiveModal() {
         <button class="btn btn-danger btn-xs" onclick="deleteArchivedNote(${i})">Delete</button>
       </div>
     `;
-
     list.appendChild(item);
   });
-
   modal.classList.add('open');
 }
 
@@ -1559,25 +1553,57 @@ function closeArchiveModal() {
 
 function restoreNote(i) {
   const note = state.archivedNotes.splice(i, 1)[0];
-
   delete note.archivedAt;
-
   state.notes.unshift(note);
-
-  closeArchiveModal();
-  renderNotes();
-  scheduleSave();
+  closeArchiveModal(); renderNotes(); scheduleSave();
 }
 
 async function deleteArchivedNote(i) {
   const ok = await confirm2('Permanently delete archived note "' + (state.archivedNotes[i].title || 'Untitled') + '"?');
   if (!ok) return;
-
   state.archivedNotes.splice(i, 1);
+  closeArchiveModal(); openArchiveModal(); renderNotes(); scheduleSave();
+}
 
-  closeArchiveModal();
-  openArchiveModal();
-  renderNotes();
+// ── Suggestions ───────────────────────────────────────────
+function renderSuggestions() {
+  const container = document.getElementById('suggestions-list');
+  if (!container) return;
+  container.innerHTML = '';
+  if (!(state.suggestions || []).length) {
+    container.innerHTML = '<div style="font-family:var(--font-mono);font-size:.78rem;color:var(--text-tertiary)">No suggestions yet</div>';
+    return;
+  }
+  state.suggestions.forEach((s, i) => {
+    const card = document.createElement('div');
+    card.className = 'suggestion-card' + (s.status === 'done' ? ' done' : '');
+    card.innerHTML = `
+      <div class="suggestion-head">
+        <input class="suggestion-title-inp" value="${escH(s.title||'')}" placeholder="Suggestion title…" oninput="updateSuggestion(${i},'title',this.value)">
+        <button class="suggestion-del" onclick="deleteSuggestion(${i})">×</button>
+      </div>
+      <textarea class="input suggestion-body" placeholder="Details…" oninput="updateSuggestion(${i},'body',this.value)">${escH(s.body||'')}</textarea>
+      <div class="suggestion-actions">
+        <span class="tag ${s.status==='done'?'tag-green':'tag-blue'}">${s.status||'idea'}</span>
+        <button class="btn btn-ghost btn-xs" onclick="toggleSuggestionStatus(${i})">${s.status==='done'?'Reopen':'Mark done'}</button>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function addSuggestion() {
+  const inp   = document.getElementById('new-suggestion-title');
+  const title = inp ? inp.value.trim() : '';
+  if (!title) return;
+  state.suggestions.unshift({ id: uid(), title, body:'', status:'idea' });
+  inp.value = '';
+  renderSuggestions(); scheduleSave();
+}
+
+function updateSuggestion(i, field, value) {
+  if (!state.suggestions[i]) return;
+  state.suggestions[i][field] = value;
   scheduleSave();
 }
 
@@ -1659,21 +1685,16 @@ let cmdSelectedIdx = -1;
 function openCmdPalette() {
   const ov = document.getElementById('cmd-ov');
   if (!ov) return;
-
   ov.classList.add('open');
-
   const inp = document.getElementById('cmd-input');
-
   inp.value = '';
   inp.focus();
-
   renderCmds('');
 }
 
 function closeCmdPalette() {
   const ov = document.getElementById('cmd-ov');
   if (ov) ov.classList.remove('open');
-
   cmdSelectedIdx = -1;
 }
 
@@ -1685,7 +1706,6 @@ function filterCmds() {
 function renderCmds(q) {
   const res = document.getElementById('cmd-results');
   if (!res) return;
-
   res.innerHTML = '';
   cmdSelectedIdx = -1;
 
@@ -1698,10 +1718,8 @@ function renderCmds(q) {
     { ico:'🧠', lbl:'Suggestions', meta:'Tab', action:()=>{ showTab('suggestions'); closeCmdPalette(); }},
   ];
 
-  const noteItems = (state.notes || []).map((n,i) => ({
-    ico:'📄',
-    lbl: n.title || 'Untitled note',
-    meta:'Note',
+  const noteItems = (state.notes||[]).map((n,i) => ({
+    ico:'📄', lbl: n.title || 'Untitled note', meta:'Note',
     action: () => {
       showTab('notes');
       closeCmdPalette();
@@ -1729,18 +1747,12 @@ function renderCmds(q) {
   }
 
   const groups = {};
-
-  filtered.forEach(it => {
-    if (!groups[it.meta]) groups[it.meta] = [];
-    groups[it.meta].push(it);
-  });
-
+  filtered.forEach(it => { if (!groups[it.meta]) groups[it.meta] = []; groups[it.meta].push(it); });
   Object.entries(groups).forEach(([grp, items]) => {
     const gl = document.createElement('div');
     gl.className = 'cmd-grp';
     gl.textContent = grp;
     res.appendChild(gl);
-
     items.forEach(it => {
       const div = document.createElement('div');
       div.className = 'cmd-res';
@@ -1789,7 +1801,6 @@ function confirm2(msg) {
   return new Promise(resolve => {
     document.getElementById('confirm-msg').textContent = msg;
     document.getElementById('confirm-ov').classList.add('open');
-
     confirmResolve = (val) => {
       document.getElementById('confirm-ov').classList.remove('open');
       confirmResolve = () => {};
@@ -1819,3 +1830,4 @@ function setText(id, value) {
   const el = document.getElementById(id);
   if (el) el.textContent = value;
 }
+
