@@ -360,9 +360,15 @@ function normalizeState() {
   }
 
   // Ensure every topic has a priority field
+  // Also auto-assign priority from pct if not yet set
   state.topics.forEach(t => {
     if (!t.id)       t.id       = uid();
-    if (!t.priority) t.priority = 'none';
+    if (!t.priority || t.priority === 'none') {
+      // Try to find matching DEFAULT_TOPIC to get pct
+      const def = DEFAULT_TOPICS.find(d => d.name === t.name);
+      if (def) t.priority = pctToPriority(def.pct);
+      else if (!t.priority) t.priority = 'none';
+    }
   });
 
   // Sort topics by priority: high → medium → low/none
