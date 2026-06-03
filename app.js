@@ -30,7 +30,6 @@ let shelfChartInstance = null;
 window.onload = () => {
   buildNbmeGrid();
   for (let i = 0; i < 3; i++) addMissedSession();
-  updateCountdown();
   initShelfChart();
   renderCustomTopics();
 
