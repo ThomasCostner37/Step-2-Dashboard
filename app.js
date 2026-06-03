@@ -34,59 +34,53 @@ let state = {
 };
 
 // ── Google OAuth & Drive ──────────────────────────────────
-let tokenClient, gapiInited = false, gisInited = false;
+// Scripts are loaded synchronously so window.onload guarantees
+// both gapi and google.accounts.oauth2 are fully available.
+let tokenClient;
 let saveTimer = null;
 
-// Called by <script onload> on the GAPI script tag
-function gapiLoaded() {
+window.onload = function () {
+  // UI setup
+  const nbmeSel = document.getElementById('nbme-form-sel');
+  if (nbmeSel) NBME_FORMS.forEach(f => nbmeSel.appendChild(new Option(f, f)));
+  renderFocusSelector();
+  document.addEventListener('keydown', globalKeyDown);
+
+  // Init GAPI client (for Docs API)
   gapi.load('client', async () => {
     try {
       await gapi.client.init({
         apiKey: typeof API_KEY !== 'undefined' ? API_KEY : '',
         discoveryDocs: ['https://docs.googleapis.com/$discovery/rest?version=v1']
       });
-    } catch(e) {
-      console.warn('gapi.client.init warning (non-fatal):', e);
+    } catch (e) {
+      console.warn('gapi init (non-fatal):', e);
     }
-    gapiInited = true;
-    maybeReady();
-  });
-}
 
-// Called by <script onload> on the GIS script tag
-function gisLoaded() {
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: SCOPES,
-    callback: async (resp) => {
-      if (resp.error) {
-        // Silent sign-in failed — just leave the sign-in button visible
-        console.log('Sign-in response:', resp.error);
-        return;
+    // Init Google Identity Services token client
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPES,
+      callback: async (resp) => {
+        if (resp.error) {
+          // Silent attempt failed — show sign-in button, do nothing
+          console.log('GIS:', resp.error);
+          return;
+        }
+        gapi.client.setToken({ access_token: resp.access_token });
+        document.getElementById('auth-screen').style.display = 'none';
+        document.getElementById('app').classList.add('visible');
+        await loadFromDrive();
+        renderAll();
       }
-      gapi.client.setToken({ access_token: resp.access_token });
-      document.getElementById('auth-screen').style.display = 'none';
-      document.getElementById('app').classList.add('visible');
-      await loadFromDrive();
-      renderAll();
-    }
-  });
-  gisInited = true;
-  maybeReady();
-}
+    });
 
-// Attempt silent sign-in once both libs are ready
-function maybeReady() {
-  if (gapiInited && gisInited) {
+    // Try silent sign-in first (works if user was signed in before)
     tokenClient.requestAccessToken({ prompt: 'none' });
-  }
-}
+  });
+};
 
 function handleSignIn() {
-  if (!tokenClient) {
-    alert('Google Sign-In is still loading. Please wait a moment and try again.');
-    return;
-  }
   tokenClient.requestAccessToken({ prompt: '' });
 }
 
@@ -95,14 +89,6 @@ function handleSignOut() {
   document.getElementById('app').classList.remove('visible');
   document.getElementById('auth-screen').style.display = 'flex';
 }
-
-// Non-Google UI init — safe to run immediately
-document.addEventListener('DOMContentLoaded', () => {
-  const sel = document.getElementById('nbme-form-sel');
-  if (sel) NBME_FORMS.forEach(f => sel.appendChild(new Option(f, f)));
-  renderFocusSelector();
-  document.addEventListener('keydown', globalKeyDown);
-});
 
 // ── Drive: Load ───────────────────────────────────────────
 async function loadFromDrive() {
