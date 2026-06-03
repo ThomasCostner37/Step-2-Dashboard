@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Step 2 Master Checklist — Thomas Costner</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -148,7 +149,8 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
 </div>
 
 <div class="tabs">
-  <div class="tab active" onclick="showTab('phase1',this)">Phase 1 — Pre-CSSE</div>
+  <div class="tab active" onclick="showTab('dashboard',this)">Dashboard</div>
+  <div class="tab" onclick="showTab('phase1',this)">Phase 1 — Pre-CSSE</div>
   <div class="tab" onclick="showTab('phase2',this)">Phase 2 — Post-CSSE</div>
   <div class="tab" onclick="showTab('sessions',this)">Session Log</div>
   <div class="tab" onclick="showTab('missed',this)">Missed Concepts</div>
@@ -159,8 +161,32 @@ body{font-family:'DM Sans',sans-serif;background:#F0F4F8;color:var(--text);min-h
 
 <div class="main">
 
+<!-- DASHBOARD -->
+<div id="tab-dashboard" class="tab-content active">
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+    <div style="background:var(--navy);border-radius:14px;padding:28px;text-align:center">
+      <div style="font-size:11px;color:var(--blue-mid);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Days Until CSSE</div>
+      <div id="home-css-days" style="font-family:'DM Mono',monospace;font-size:56px;font-weight:500;color:var(--gold);line-height:1">—</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:8px">June 12, 2026</div>
+    </div>
+    <div style="background:var(--navy);border-radius:14px;padding:28px;text-align:center">
+      <div style="font-size:11px;color:var(--blue-mid);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Days Until Step 2 CK</div>
+      <div id="home-step-days" style="font-family:'DM Mono',monospace;font-size:56px;font-weight:500;color:var(--gold);line-height:1">—</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:8px">August 12, 2026</div>
+    </div>
+  </div>
+
+  <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:24px">
+    <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px">Shelf Score Trend</div>
+    <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:20px">EPC / % over time &nbsp;·&nbsp; <span style="color:var(--blue)">●</span> shelf/EPC &nbsp; <span style="color:var(--gold)">●</span> CMS form &nbsp; <span style="color:var(--gold)">- -</span> running avg</div>
+    <canvas id="shelf-chart" height="110"></canvas>
+  </div>
+
+</div>
+
 <!-- PHASE 1 -->
-<div id="tab-phase1" class="tab-content active">
+<div id="tab-phase1" class="tab-content">
   <div class="progress-wrap">
     <div class="progress-label"><span>Phase 1 Progress</span><span id="prog-text">0 / 12 topics visited</span></div>
     <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
