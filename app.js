@@ -198,6 +198,51 @@ const CMS_RAW = [
   { topic:'Renal/Urin: adverse effects of drugs',      total:5,  incorrect:2 },
 ];
 
+// ── Default Topic List (seeded from EPC + CMS data) ──────
+function pctToPriority(pct) {
+  if (pct <= 60) return 'high';
+  if (pct <= 70) return 'medium';
+  return 'low';
+}
+
+const DEFAULT_TOPICS = [
+  // EPC weak spots (below national avg or below 80%)
+  { name:'FM — Older Adult (66+)',                    pct:73 },
+  { name:'Surgery — Applying Foundational Science',  pct:66 },
+  { name:'Surgery — Respiratory System',             pct:69 },
+  { name:'Surgery — Female Repro, Breast & Endo',   pct:80 },
+  { name:'Surgery — Pharmacotherapy & Mgmt',         pct:83 },
+  { name:'Psych — Diseases of Nervous System',       pct:65 },
+  { name:'OB/GYN — Health Maint & Prevention',       pct:73 },
+  { name:'IM — Cardiovascular System',               pct:67 },
+  { name:'IM — Gastrointestinal System',             pct:75 },
+  { name:'IM — Respiratory System',                  pct:81 },
+  { name:'IM — Diagnosis',                           pct:81 },
+  // CMS weak spots (<80% correct, ≥5 incorrect)
+  { name:'Endo: thyroid disorders',                  pct:57 },
+  { name:'Resp: upper airway disorders',             pct:56 },
+  { name:'Gastro: congenital disorders',             pct:57 },
+  { name:'Behavioral: disorders infancy/childhood',  pct:60 },
+  { name:'GenPrin: childhood developmental stages',  pct:57 },
+  { name:'F Repro: menopause',                       pct:57 },
+  { name:'Renal/Urin: adverse effects of drugs',     pct:60 },
+  { name:'Biostat: sensitivity/specificity',         pct:63 },
+  { name:'F Repro: fertility and infertility',       pct:63 },
+  { name:'Cardio: peripheral arterial vascular',     pct:67 },
+  { name:'Cardio: dysrhythmias',                     pct:67 },
+  { name:'Cardio: congenital disorders',             pct:67 },
+  { name:'OB: obstetric complications',              pct:70 },
+  { name:'OB: systemic disorders in pregnancy',      pct:70 },
+  { name:'Gastro: immunologic/inflammatory',         pct:70 },
+  { name:'OB: labor and delivery',                   pct:72 },
+  { name:'Cardio: infectious disorders',             pct:71 },
+  { name:'Multi: fluid/electrolyte disorders',       pct:71 },
+  { name:'OB: supervision of normal pregnancy',      pct:75 },
+  { name:'Resp: obstructive airway disease',         pct:75 },
+  { name:'F Repro: menstrual/endocrine disorders',   pct:77 },
+  { name:'Blood: reactions to blood components',     pct:80 },
+];
+
 // ── State ─────────────────────────────────────────────────
 let state = {
   topics:            [],
@@ -354,7 +399,8 @@ function normalizeState() {
   // Seed DEFAULT_TOPICS if list is empty (first load or after clearing old ones)
   if (!state.topics.length && !state.archivedTopics.length) {
     state.topics = DEFAULT_TOPICS.map(t => ({
-      id: uid(), name: t.name, done: false, priority: 'none', src: t.src
+      id: uid(), name: t.name, done: false,
+      priority: pctToPriority(t.pct), pct: t.pct
     }));
   }
 
@@ -1032,7 +1078,10 @@ function renderWeakSpots() {
   if (!container) return;
   container.innerHTML = '';
 
-  const all  = state.topics || [];
+  const PRIO_ORDER = { high:0, medium:1, low:2, none:3 };
+  const all  = [...(state.topics || [])].sort((a,b) =>
+    (PRIO_ORDER[a.priority]||3) - (PRIO_ORDER[b.priority]||3)
+  );
   const done = all.filter(t => t.done).length;
   const pct  = all.length ? Math.round((done/all.length)*100) : 0;
   if (frac) frac.textContent = done + ' / ' + all.length + ' · ' + pct + '%';
@@ -1044,11 +1093,20 @@ function renderWeakSpots() {
     return;
   }
   shown.forEach(topic => {
+    const prio = topic.priority || 'none';
+    const badge = prio === 'high'
+      ? '<span style="font-family:var(--font-mono);font-size:.5rem;padding:0 4px;border-radius:3px;background:#FCEBEB;color:#A32D2D;flex-shrink:0">H</span>'
+      : prio === 'medium'
+      ? '<span style="font-family:var(--font-mono);font-size:.5rem;padding:0 4px;border-radius:3px;background:#FAEEDA;color:#633806;flex-shrink:0">M</span>'
+      : prio === 'low'
+      ? '<span style="font-family:var(--font-mono);font-size:.5rem;padding:0 4px;border-radius:3px;background:var(--bg-elevated);color:var(--text-tertiary);flex-shrink:0">L</span>'
+      : '';
     const row = document.createElement('div');
     row.className = 'ws-row' + (topic.done ? ' done' : '');
     row.onclick = () => toggleTopicDone(topic.id);
     row.innerHTML = `
       <div class="ws-check">${topic.done ? '✓' : ''}</div>
+      ${badge}
       <div class="ws-name" title="${escH(topic.name)}">${escH(topic.name)}</div>
       <button class="ws-del" onclick="event.stopPropagation();archiveTopicById('${topic.id}')"
         onmouseover="this.style.color='var(--urgent)'" onmouseout="this.style.color=''">↓</button>
