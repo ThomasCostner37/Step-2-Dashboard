@@ -6,6 +6,22 @@ const SCOPES = 'https://www.googleapis.com/auth/documents';
 const TOPICS = ['ob','frepro','resp','cardio','endo','multi','blood','cns','gi','beh','bio','msk'];
 const NBME_FORMS = ['Form 9','Form 10','Form 11','Form 12','Form 13','Form 14','Form 15','Form 16'];
 
+const SHELF_SCORES = [
+  { date: '2025-08-12', label: 'FM Shelf 1',      score: 82, type: 'shelf' },
+  { date: '2025-09-12', label: 'FM Shelf 2',      score: 87, type: 'shelf' },
+  { date: '2025-10-06', label: 'Peds Shelf 1',    score: 87, type: 'shelf' },
+  { date: '2025-10-31', label: 'Peds Shelf 2',    score: 87, type: 'shelf' },
+  { date: '2025-11-12', label: 'Surgery Shelf 1', score: 75, type: 'shelf' },
+  { date: '2025-12-19', label: 'Surgery Shelf 2', score: 83, type: 'shelf' },
+  { date: '2026-02-06', label: 'Psych CMS 5',     score: 82, type: 'cms'   },
+  { date: '2026-02-08', label: 'Psych CMS 6',     score: 94, type: 'cms'   },
+  { date: '2026-02-12', label: 'Psych CMS 7',     score: 84, type: 'cms'   },
+  { date: '2026-02-13', label: 'Psych Shelf 1',   score: 94, type: 'shelf' },
+  { date: '2026-03-20', label: 'OB/GYN Shelf 1',  score: 83, type: 'shelf' },
+  { date: '2026-04-20', label: 'IM Shelf 1',      score: 88, type: 'shelf' },
+  { date: '2026-05-29', label: 'IM Shelf 2',      score: 84, type: 'shelf' },
+];
+
 let accessToken = null;
 let saveTimer = null;
 let lastSavedState = null;
@@ -18,6 +34,7 @@ window.onload = () => {
   for (let i = 0; i < 5; i++) addSessionRow();
   for (let i = 0; i < 5; i++) addMissedRow();
   updateCountdown();
+  initShelfChart();
 
   const saved = localStorage.getItem('step2_access_token');
   if (saved) {
@@ -383,6 +400,99 @@ function updateArchiveEmptyState() {
   if (!emptyEl) return;
   const hasItems = document.querySelectorAll('#archive-sections > div[id^="note-"]').length > 0;
   emptyEl.style.display = hasItems ? 'none' : 'block';
+}
+
+// ============================================================
+// SHELF CHART
+// ============================================================
+function initShelfChart() {
+  const now = new Date();
+  document.getElementById('home-css-days').textContent =
+    Math.max(0, Math.ceil((new Date('2026-06-12') - now) / 86400000));
+  document.getElementById('home-step-days').textContent =
+    Math.max(0, Math.ceil((new Date('2026-08-12') - now) / 86400000));
+
+  const labels = SHELF_SCORES.map(s => s.label);
+  const scores = SHELF_SCORES.map(s => s.score);
+
+  const avgLine = scores.map((_, i) => {
+    const slice = scores.slice(0, i + 1);
+    return Math.round((slice.reduce((a, b) => a + b, 0) / slice.length) * 10) / 10;
+  });
+
+  const pointColors = SHELF_SCORES.map(s => s.type === 'cms' ? '#C9A84C' : '#2B6CB0');
+  const pointBorderColors = SHELF_SCORES.map(s => s.type === 'cms' ? '#C9A84C' : '#2B6CB0');
+
+  const ctx = document.getElementById('shelf-chart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Score (blue = shelf/EPC, gold = CMS)',
+          data: scores,
+          borderColor: '#2B6CB0',
+          backgroundColor: 'rgba(43,108,176,0.07)',
+          pointBackgroundColor: pointColors,
+          pointBorderColor: pointBorderColors,
+          pointRadius: 7,
+          pointHoverRadius: 9,
+          tension: 0.3,
+          fill: true,
+          order: 2,
+        },
+        {
+          label: 'Running Average',
+          data: avgLine,
+          borderColor: '#C9A84C',
+          borderDash: [5, 4],
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: false,
+          order: 1,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          labels: {
+            font: { family: "'DM Mono', monospace", size: 11 },
+            color: '#718096',
+            boxWidth: 28,
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label.split('(')[0].trim()}: ${ctx.parsed.y}%`
+          }
+        }
+      },
+      scales: {
+        y: {
+          min: 60,
+          max: 100,
+          ticks: {
+            font: { family: "'DM Mono', monospace", size: 11 },
+            color: '#718096',
+            callback: v => v + '%'
+          },
+          grid: { color: '#E2E8F0' }
+        },
+        x: {
+          ticks: {
+            font: { family: "'DM Mono', monospace", size: 10 },
+            color: '#718096',
+            maxRotation: 40,
+          },
+          grid: { display: false }
+        }
+      }
+    }
+  });
 }
 
 // ============================================================
