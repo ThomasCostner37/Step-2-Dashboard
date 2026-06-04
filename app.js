@@ -32,10 +32,9 @@ const SHELF_SCORES = [
   { date:'2025-11-12', label:'Surgery Shelf 1', score:75 },
   { date:'2025-12-19', label:'Surgery Shelf 2', score:83 },
   { date:'2026-02-13', label:'Psych Shelf 1',   score:94 },
-  { date:'2026-03-20', label:'Psych Shelf 2',   score:94 },
-  { date:'2026-04-18', label:'OB/GYN Shelf 1',  score:86 },
-  { date:'2026-05-15', label:'IM Shelf 1',       score:88 },
-  { date:'2026-06-01', label:'IM Shelf 2',       score:84 },
+  { date:'2026-03-20', label:'OB/GYN Shelf 1',  score:83 },
+  { date:'2026-04-20', label:'IM Shelf 1',      score:88 },
+  { date:'2026-05-29', label:'IM Shelf 2',      score:84 },
 ];
 
 // ── EPC Subscore Data (Shelf 2 only per rotation) ────────
