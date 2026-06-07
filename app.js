@@ -3210,10 +3210,27 @@ function injectSpotifyTab() {
           </div>
         </div>
 
-        <!-- RIGHT PANEL: PLAYLISTS or QUOTES -->
-        <div class="pom-card">
-          <!-- Toggle -->
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.85rem">
+        <!-- RIGHT PANEL: POMODORO (top) + PLAYLISTS/QUOTES (bottom) -->
+        <div class="pom-card" style="display:flex;flex-direction:column;gap:0">
+
+          <!-- POMODORO -->
+          <div style="margin-bottom:1.1rem">
+            <div class="dash-title" style="margin-bottom:.6rem">Pomodoro</div>
+            <div class="pom-display" style="margin:.4rem 0 .7rem">
+              <div class="pom-time" id="focus-pom-time">45:00</div>
+              <div class="pom-phase" id="focus-pom-phase">Work</div>
+            </div>
+            <div class="pom-controls" style="margin-bottom:0">
+              <button class="pom-btn" onclick="pomReset()">Reset</button>
+              <button class="pom-btn primary" id="focus-pom-start-btn" onclick="pomToggle()">Start</button>
+              <button class="pom-btn" onclick="pomOpenEdit()">Edit</button>
+            </div>
+          </div>
+
+          <div style="height:1px;background:var(--border);margin-bottom:1rem"></div>
+
+          <!-- PLAYLISTS / QUOTES TOGGLE -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem">
             <div class="dash-title" id="focus-right-title">Playlists</div>
             <div style="display:flex;gap:3px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--r-sm);padding:3px">
               <button class="advisor-tab-btn active" id="focus-btn-playlists" onclick="setFocusRight('playlists')">Playlists</button>
@@ -3222,15 +3239,15 @@ function injectSpotifyTab() {
           </div>
 
           <!-- Playlists panel -->
-          <div id="focus-playlists-panel">
+          <div id="focus-playlists-panel" style="flex:1;overflow-y:auto;max-height:320px">
             <div id="sp-playlists-list">
               <div class="sp-idle" style="padding:1rem 0">Connect Spotify to see your playlists</div>
             </div>
           </div>
 
           <!-- Quotes panel -->
-          <div id="focus-quotes-panel" style="display:none">
-            <div style="min-height:200px;display:flex;flex-direction:column;justify-content:center;padding:.5rem 0">
+          <div id="focus-quotes-panel" style="display:none;flex:1">
+            <div style="min-height:180px;display:flex;flex-direction:column;justify-content:center;padding:.5rem 0">
               <div id="focus-quote-text" style="font-family:var(--font-display);font-style:italic;font-size:1.05rem;color:var(--text-secondary);line-height:1.8;transition:opacity .5s ease;margin-bottom:.85rem"></div>
               <div id="focus-quote-attr" style="font-family:var(--font-mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);transition:opacity .5s ease"></div>
             </div>
@@ -3419,6 +3436,7 @@ async function exchangeSpotifyCode(code) {
     window.history.replaceState({}, '', window.location.pathname);
     initSpotifyPlayer();
     startSpotifyPoll();
+    setTimeout(fetchSpotifyPlaylists, 1500);
   }
 }
 
@@ -3459,6 +3477,7 @@ function initSpotify() {
     spToken = saved;
     initSpotifyPlayer();
     startSpotifyPoll();
+    setTimeout(fetchSpotifyPlaylists, 1000);
   }
 
   // Inject Web Playback SDK
@@ -3838,6 +3857,16 @@ function pomRender() {
   if (hdrTime)  hdrTime.textContent  = timeStr;
   if (hdrPhase) { hdrPhase.textContent = phaseStr; hdrPhase.className = 'hdr-pom-phase' + (pomPhase === 'break' ? ' break' : ''); }
   if (hdrStart) hdrStart.textContent = pomRunning ? '⏸' : '▶';
+
+  // Update focus tab pomodoro display
+  const fTime  = document.getElementById('focus-pom-time');
+  const fPhase = document.getElementById('focus-pom-phase');
+  const fStart = document.getElementById('focus-pom-start-btn');
+  const phaseCls = 'pom-phase' + (pomPhase === 'break' ? ' break' : '');
+  const btnLabel = pomRunning ? 'Pause' : (pomSecondsLeft < pomGetWork() && pomPhase === 'work' ? 'Resume' : 'Start');
+  if (fTime)  fTime.textContent  = timeStr;
+  if (fPhase) { fPhase.textContent = phaseStr; fPhase.className = phaseCls; }
+  if (fStart) fStart.textContent = btnLabel;
 
   // Update tab title while running
   if (pomRunning) document.title = `${timeStr} · Step 2`;
