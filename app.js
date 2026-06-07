@@ -2439,9 +2439,10 @@ Build a concrete study schedule. Rules:
 2. Prioritize high-priority topics first, then medium, then low.
 3. For low energy days, front-load recognition/pattern topics. For high energy, prioritize mechanism/cause questions (Thomas's hardest type).
 4. Estimate time per topic cluster based on session log history if available, otherwise reasonable defaults (30–60 min per topic cluster).
-5. Don't overfill blocks — leave 15–20% buffer per block.
+5. Build in a 15–20% buffer by simply allocating less time to topics — do NOT add a "Buffer" or "Review" line as a topic.
 6. Note if any calendar events or blocked days are relevant this week.
 7. Give a 1–2 sentence rationale at the end explaining why you chose this order.
+8. Topic names should be clean and concise — no time estimates or priority labels in the name itself.
 
 Respond ONLY with valid JSON in this exact format:
 {
@@ -2451,8 +2452,7 @@ Respond ONLY with valid JSON in this exact format:
       "totalMinutes": 180,
       "topics": [
         { "name": "OB: Labor & Delivery + Obstetric Complications", "minutes": 90, "note": "Your highest-miss CMS cluster" },
-        { "name": "Cardio: Dysrhythmias + Congenital", "minutes": 55, "note": "Medium priority, related content" },
-        { "name": "Buffer / review", "minutes": 35, "note": "" }
+        { "name": "Cardio: Dysrhythmias + Congenital", "minutes": 55, "note": "Medium priority, related content" }
       ]
     }
   ],
@@ -2525,7 +2525,11 @@ function adoptAdvisorPlan(blockCount) {
     if (!ta) continue;
     const lines = ta.value.split('\n').map(l => l.trim()).filter(Boolean);
     lines.forEach(line => {
-      state.todayFocus.items.push({ topic: line, done: false });
+      // Skip buffer/review lines
+      if (/^buffer|^review\s*\/|^buffer\s*\/\s*review/i.test(line)) return;
+      // Strip time estimates "(45 min)" and notes "— High priority..." 
+      const clean = line.replace(/\s*\(.*$/, '').replace(/\s*—.*$/, '').trim();
+      if (clean) state.todayFocus.items.push({ topic: clean, done: false });
     });
   }
 
