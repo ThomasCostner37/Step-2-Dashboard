@@ -626,7 +626,7 @@ function injectStyles() {
                    color:var(--text-primary); margin-bottom:.2rem; line-height:1.3; }
     .sp-artist-lg { font-family:var(--font-mono); font-size:.75rem; color:var(--text-tertiary); margin-bottom:.85rem; }
     .sp-progress-wrap { height:3px; background:var(--bg-elevated); border-radius:999px; margin-bottom:.5rem; overflow:hidden; }
-    .sp-progress-bar  { height:100%; background:#1DB954; border-radius:999px; transition:width .5s linear; }
+    .sp-progress-bar  { height:100%; background:#1DB954; border-radius:999px; transition:width .9s linear; }
     .sp-time-row { display:flex; justify-content:space-between; font-family:var(--font-mono);
                    font-size:.58rem; color:var(--text-tertiary); margin-bottom:1rem; }
     .sp-controls { display:flex; align-items:center; justify-content:center; gap:16px; }
@@ -3125,8 +3125,13 @@ const SPOTIFY_SCOPES      = [
 let spToken        = null;
 let spPlayer       = null;
 let spDeviceId     = null;
-let spPollTimer    = null;
-let spCurrentTrack = null;
+let spPollTimer        = null;
+let spCurrentTrack     = null;
+let spInterpolateTimer = null;
+let spLastPollTime     = null;
+let spLastProgress     = 0;
+let spLastDuration     = 0;
+let spIsPlaying        = false;
 
 // ── Tab injection ─────────────────────────────────────────
 // ── Expanded quotes ──────────────────────────────────────
@@ -3526,9 +3531,23 @@ function initSpotifyPlayer() {
 // ── Now Playing ───────────────────────────────────────────
 function startSpotifyPoll() {
   clearInterval(spPollTimer);
+  clearInterval(spInterpolateTimer);
   fetchNowPlaying();
   fetchSpotifyPlaylists();
-  spPollTimer = setInterval(fetchNowPlaying, 5000);
+  spPollTimer = setInterval(fetchNowPlaying, 10000);
+  // Interpolate progress bar every second between polls
+  spInterpolateTimer = setInterval(() => {
+    if (!spIsPlaying || !spLastDuration) return;
+    const elapsed = Date.now() - spLastPollTime;
+    const interpolated = Math.min(spLastProgress + elapsed, spLastDuration);
+    const pct = Math.round((interpolated / spLastDuration) * 100);
+    const bar = document.querySelector('.sp-progress-bar');
+    if (bar) bar.style.width = pct + '%';
+    // Update time display
+    const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
+    const timeEls = document.querySelectorAll('.sp-time-row span:first-child');
+    timeEls.forEach(el => el.textContent = fmt(interpolated));
+  }, 1000);
 }
 
 async function fetchNowPlaying() {
@@ -3545,6 +3564,14 @@ async function fetchNowPlaying() {
     }
     const data = await resp.json();
     spCurrentTrack = data;
+    if (data && data.item) {
+      spLastProgress = data.progress_ms || 0;
+      spLastDuration = data.item.duration_ms || 0;
+      spLastPollTime = Date.now();
+      spIsPlaying    = data.is_playing;
+    } else {
+      spIsPlaying = false;
+    }
     renderNowPlaying(data);
   } catch(e) { console.warn('Spotify poll:', e); }
 }
@@ -3552,6 +3579,10 @@ async function fetchNowPlaying() {
 function updateNowPlayingFromSDK(sdkState) {
   if (!sdkState || !sdkState.track_window) return;
   const track = sdkState.track_window.current_track;
+  spLastProgress = sdkState.position || 0;
+  spLastDuration = sdkState.duration || 0;
+  spLastPollTime = Date.now();
+  spIsPlaying    = !sdkState.paused;
   renderNowPlayingDirect({
     isPlaying:  !sdkState.paused,
     trackName:  track.name,
