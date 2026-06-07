@@ -240,21 +240,48 @@ window.onload = function () {
       scope: SCOPES,
       callback: async (resp) => {
         if (resp.error) { console.log('GIS:', resp.error); return; }
-        gapi.client.setToken({ access_token: resp.access_token });
-        document.getElementById('auth-screen').style.display = 'none';
-        document.getElementById('app').classList.add('visible');
-        await loadFromDrive();
-        normalizeState();
-        renderAll();
+        const token = resp.access_token;
+        gapi.client.setToken({ access_token: token });
+        // Persist token + expiry so reload is silent
+        localStorage.setItem('goog_token', token);
+        localStorage.setItem('goog_token_exp', Date.now() + 55 * 60 * 1000); // 55 min
+        showApp();
       }
     });
-    setTimeout(() => tokenClient.requestAccessToken({ prompt:'none' }), 100);
+
+    // Try restoring saved token first
+    const savedToken  = localStorage.getItem('goog_token');
+    const savedExpiry = parseInt(localStorage.getItem('goog_token_exp') || '0');
+    if (savedToken && Date.now() < savedExpiry) {
+      gapi.client.setToken({ access_token: savedToken });
+      showApp();
+      // Schedule silent refresh before expiry
+      const msLeft = savedExpiry - Date.now();
+      setTimeout(() => tokenClient.requestAccessToken({ prompt:'none' }), Math.max(0, msLeft - 2 * 60 * 1000));
+    } else {
+      // Silent sign-in attempt
+      setTimeout(() => tokenClient.requestAccessToken({ prompt:'none' }), 100);
+    }
   });
 };
+
+async function showApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  await loadFromDrive();
+  normalizeState();
+  renderAll();
+  // Auto-refresh token every 55 min while app is open
+  setInterval(() => tokenClient.requestAccessToken({ prompt:'none' }), 55 * 60 * 1000);
+  // Init pomodoro header display (needs header widgets injected by renderAll first)
+  setTimeout(initPomDisplay, 100);
+}
 
 function handleSignIn()  { tokenClient.requestAccessToken({ prompt:'' }); }
 function handleSignOut() {
   gapi.client.setToken(null);
+  localStorage.removeItem('goog_token');
+  localStorage.removeItem('goog_token_exp');
   document.getElementById('app').classList.remove('visible');
   document.getElementById('auth-screen').style.display = 'flex';
 }
@@ -396,7 +423,6 @@ function uid() { return Math.random().toString(36).slice(2,10); }
 // ── Runtime UI Injection ──────────────────────────────────
 function injectAppRefinements() {
   injectStyles();
-  injectSuggestionsTab();
   injectSpotifyTab();
   rebuildDashboardShell();
   rebuildTopicsTab();
@@ -515,17 +541,6 @@ function injectStyles() {
     .ief-ta   { min-height:58px; resize:vertical; }
     .ief-acts { display:flex; gap:8px; justify-content:flex-end; margin-top:4px; }
 
-    .suggestion-grid { display:grid; gap:10px; }
-    .suggestion-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-lg); padding:1rem 1.1rem; }
-    .suggestion-card.done { opacity:.55; }
-    .suggestion-head { display:flex; align-items:center; gap:8px; margin-bottom:.55rem; }
-    .suggestion-title-inp { flex:1; background:transparent; border:none; outline:none;
-                             font-family:var(--font-display); font-size:1rem; font-weight:700; color:var(--text-primary); }
-    .suggestion-body { min-height:72px; resize:vertical; line-height:1.5; }
-    .suggestion-actions { display:flex; justify-content:space-between; align-items:center; margin-top:.55rem; }
-    .suggestion-del { background:transparent; border:none; color:var(--text-tertiary); font-size:.9rem; cursor:pointer; }
-    .suggestion-del:hover { color:var(--urgent); }
-    .suggestion-add { display:grid; grid-template-columns:1fr auto; gap:8px; margin-bottom:14px; }
 
     .pe-row { display:flex; align-items:center; justify-content:space-between; gap:8px;
               padding:.45rem 0; border-bottom:1px solid var(--border); }
@@ -543,20 +558,61 @@ function injectStyles() {
     .btn-xs.active { color:var(--accent-text); border-color:rgba(176,120,48,.35); background:var(--accent-glow); }
     .epc-rot-btn.active { color:var(--accent-text) !important; border-color:rgba(176,120,48,.35) !important; background:var(--accent-glow) !important; }
 
-    /* ── SPOTIFY / FOCUS TAB ── */
-    .sp-now-playing {
-      display:flex; align-items:center; gap:10px;
-      padding:.55rem .8rem; background:var(--bg-elevated);
+    /* ── HEADER SPOTIFY + POMODORO ── */
+    /* Spotify section */
+    .hdr-sp-section {
+      display:flex; align-items:center; gap:8px;
+      padding:5px 10px; background:var(--bg-elevated);
       border:1px solid var(--border); border-radius:var(--r-md);
-      cursor:pointer; transition:all .15s; text-decoration:none;
+      height:38px; min-width:240px; max-width:320px;
     }
-    .sp-now-playing:hover { border-color:var(--border-bright); }
-    .sp-art-sm { width:32px; height:32px; border-radius:4px; object-fit:cover; flex-shrink:0; background:var(--bg-elevated); }
-    .sp-track-sm { font-family:var(--font-mono); font-size:.68rem; color:var(--text-primary);
-                   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:160px; }
-    .sp-artist-sm { font-family:var(--font-mono); font-size:.58rem; color:var(--text-tertiary);
-                    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:160px; }
-    .sp-dot { width:6px; height:6px; border-radius:50%; background:#1DB954; flex-shrink:0; animation:blink .8s infinite; }
+    .hdr-art { width:26px; height:26px; border-radius:3px; object-fit:cover; flex-shrink:0; background:var(--bg-elevated); }
+    .hdr-track-info { flex:1; min-width:0; }
+    .hdr-track-name { font-family:var(--font-mono); font-size:.65rem; color:var(--text-primary);
+                      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .hdr-artist-name { font-family:var(--font-mono); font-size:.56rem; color:var(--text-tertiary);
+                       white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .hdr-sp-dot { width:5px; height:5px; border-radius:50%; background:#1DB954; flex-shrink:0; }
+    .hdr-sp-controls { display:flex; gap:2px; align-items:center; flex-shrink:0; }
+    .hdr-sp-btn { background:transparent; border:none; color:var(--text-tertiary); cursor:pointer;
+                  font-size:.78rem; padding:3px 5px; border-radius:3px; transition:all .12s; line-height:1; }
+    .hdr-sp-btn:hover { color:var(--text-primary); background:var(--bg-card); }
+    .hdr-sp-btn.play { color:var(--accent-text); }
+    .hdr-sp-connect { font-family:var(--font-mono); font-size:.62rem; padding:5px 10px;
+                      background:#1DB954; color:#fff; border:none; border-radius:var(--r-sm);
+                      cursor:pointer; white-space:nowrap; transition:background .15s; }
+    .hdr-sp-connect:hover { background:#1ed760; }
+
+    /* Pomodoro section */
+    .hdr-pom-section {
+      display:flex; align-items:center; gap:8px;
+      padding:5px 10px; background:var(--bg-elevated);
+      border:1px solid var(--border); border-radius:var(--r-md);
+      height:38px;
+    }
+    .hdr-pom-inner { text-align:center; min-width:52px; }
+    .hdr-pom-time { font-family:var(--font-mono); font-size:.82rem; font-weight:600;
+                    color:var(--accent); line-height:1; }
+    .hdr-pom-phase { font-family:var(--font-mono); font-size:.52rem; text-transform:uppercase;
+                     letter-spacing:.06em; color:var(--text-tertiary); margin-top:1px; }
+    .hdr-pom-phase.break { color:#2E7D32; }
+    .hdr-pom-btns { display:flex; gap:2px; }
+    .hdr-pom-btn { background:transparent; border:none; color:var(--text-tertiary); cursor:pointer;
+                   font-size:.82rem; padding:3px 5px; border-radius:3px; transition:all .12s; line-height:1; }
+    .hdr-pom-btn:hover { color:var(--text-primary); background:var(--bg-card); }
+
+    /* Pomodoro edit popover */
+    .pom-edit-pop {
+      position:fixed; z-index:200;
+      background:var(--bg-card); border:1px solid var(--border-bright);
+      border-radius:var(--r-lg); padding:.85rem 1rem;
+      box-shadow:0 8px 24px rgba(0,0,0,.12);
+    }
+    .pom-set-label { font-family:var(--font-mono); font-size:.58rem; text-transform:uppercase;
+                     letter-spacing:.08em; color:var(--text-tertiary); margin-bottom:3px; }
+
+    /* Legacy sp- classes kept for SDK compat */
+    .sp-dot { width:6px; height:6px; border-radius:50%; background:#1DB954; flex-shrink:0; }
 
     /* Focus tab layout */
     .focus-tab-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
@@ -675,30 +731,6 @@ function injectStyles() {
     .cal-pop-acts { display:flex; gap:8px; justify-content:flex-end; margin-top:.75rem; }
   `;
   document.head.appendChild(s);
-}
-
-function injectSuggestionsTab() {
-  const tabBar = document.querySelector('.tab-bar');
-  const app    = document.getElementById('app');
-  if (tabBar && !document.getElementById('btn-suggestions')) {
-    const btn = document.createElement('button');
-    btn.className = 'tab-btn'; btn.id = 'btn-suggestions';
-    btn.onclick = () => showTab('suggestions');
-    btn.innerHTML = 'Suggestions';
-    tabBar.appendChild(btn);
-  }
-  if (app && !document.getElementById('tab-suggestions')) {
-    const panel = document.createElement('div');
-    panel.id = 'tab-suggestions'; panel.className = 'tab-panel';
-    panel.innerHTML = `
-      <div class="suggestion-add">
-        <input class="input" id="new-suggestion-title" placeholder="Add future idea or feature…" onkeydown="if(event.key==='Enter')addSuggestion()">
-        <button class="btn btn-primary btn-sm" onclick="addSuggestion()">Add</button>
-      </div>
-      <div id="suggestions-list" class="suggestion-grid"></div>
-    `;
-    app.appendChild(panel);
-  }
 }
 
 function rebuildDashboardShell() {
@@ -854,7 +886,6 @@ function renderAll() {
   renderCMS();
   renderMissedSessions();
   renderNotes();
-  renderSuggestions();
   renderCalendar();
   initSpotify();
   setInterval(updateCountdown, 60000);
@@ -2021,58 +2052,6 @@ async function deleteArchivedNote(i) {
 }
 
 // ── Suggestions ───────────────────────────────────────────
-function renderSuggestions() {
-  const container = document.getElementById('suggestions-list');
-  if (!container) return;
-  container.innerHTML = '';
-  if (!(state.suggestions||[]).length) {
-    container.innerHTML = '<div style="font-family:var(--font-mono);font-size:.78rem;color:var(--text-tertiary)">No suggestions yet</div>';
-    return;
-  }
-  state.suggestions.forEach((s, i) => {
-    const card = document.createElement('div');
-    card.className = 'suggestion-card' + (s.status==='done' ? ' done' : '');
-    card.innerHTML = `
-      <div class="suggestion-head">
-        <input class="suggestion-title-inp" value="${escH(s.title||'')}" placeholder="Suggestion title…" oninput="updateSuggestion(${i},'title',this.value)">
-        <button class="suggestion-del" onclick="deleteSuggestion(${i})">×</button>
-      </div>
-      <textarea class="input suggestion-body" placeholder="Details…" oninput="updateSuggestion(${i},'body',this.value)">${escH(s.body||'')}</textarea>
-      <div class="suggestion-actions">
-        <span class="tag ${s.status==='done'?'tag-green':'tag-blue'}">${s.status||'idea'}</span>
-        <button class="btn btn-ghost btn-xs" onclick="toggleSuggestionStatus(${i})">${s.status==='done'?'Reopen':'Mark done'}</button>
-      </div>
-    `;
-    container.appendChild(card);
-  });
-}
-
-function addSuggestion() {
-  const inp = document.getElementById('new-suggestion-title');
-  const title = inp ? inp.value.trim() : '';
-  if (!title) return;
-  state.suggestions.unshift({ id:uid(), title, body:'', status:'idea' });
-  inp.value = '';
-  renderSuggestions(); scheduleSave();
-}
-
-function updateSuggestion(i, field, value) {
-  if (!state.suggestions[i]) return;
-  state.suggestions[i][field] = value; scheduleSave();
-}
-
-function toggleSuggestionStatus(i) {
-  if (!state.suggestions[i]) return;
-  state.suggestions[i].status = state.suggestions[i].status === 'done' ? 'idea' : 'done';
-  renderSuggestions(); scheduleSave();
-}
-
-async function deleteSuggestion(i) {
-  const ok = await confirm2('Delete this suggestion?');
-  if (!ok) return;
-  state.suggestions.splice(i, 1); renderSuggestions(); scheduleSave();
-}
-
 // ── Command Palette ───────────────────────────────────────
 let cmdSelectedIdx = -1;
 
@@ -2116,7 +2095,6 @@ function renderCmds(q) {
     { ico:'✅', lbl:'+ New Note',           meta:'Action', action:()=>{ showTab('notes');       closeCmdPalette(); addNote(); }},
     { ico:'➕', lbl:'+ New Missed Session', meta:'Action', action:()=>{ showTab('missed');      closeCmdPalette(); addMissedSession(); }},
     { ico:'📅', lbl:'+ Practice Exam',      meta:'Action', action:()=>{ showTab('dashboard');  closeCmdPalette(); openPracticeExamModal(); }},
-    { ico:'🧠', lbl:'+ Suggestion',         meta:'Action', action:()=>{ showTab('suggestions');closeCmdPalette(); document.getElementById('new-suggestion-title')?.focus(); }},
     { ico:'✦',  lbl:'Open Advisor',         meta:'Action', action:()=>{ closeCmdPalette(); openAdvisorModal(); }},
   ];
 
@@ -3149,6 +3127,58 @@ let spPollTimer    = null;
 let spCurrentTrack = null;
 
 // ── Tab injection ─────────────────────────────────────────
+// ── Expanded quotes ──────────────────────────────────────
+const ALL_QUOTES = [
+  // Grind / determination
+  { text:"The difference between the impossible and the possible lies in a person's determination.", attr:"Tommy Lasorda" },
+  { text:"You have to fight to reach your dream. You have to sacrifice and work hard for it.", attr:"Lionel Messi" },
+  { text:"Hard work beats talent when talent doesn't work hard.", attr:"Tim Notke" },
+  { text:"Champions aren't made in the gyms. Champions are made from something they have deep inside them.", attr:"Muhammad Ali" },
+  { text:"Don't wish it were easier. Wish you were better.", attr:"Jim Rohn" },
+  { text:"The more I practice, the luckier I get.", attr:"Gary Player" },
+  { text:"It's not whether you get knocked down; it's whether you get up.", attr:"Vince Lombardi" },
+  { text:"The pain you feel today will be the strength you feel tomorrow.", attr:"" },
+  { text:"Obsessed is a word the lazy use to describe the dedicated.", attr:"" },
+  { text:"You don't get what you wish for. You get what you work for.", attr:"" },
+  { text:"Somewhere someone is working harder than you. Don't let them win.", attr:"" },
+  { text:"Outwork everyone. Every single day.", attr:"" },
+  { text:"The best never rest.", attr:"" },
+  { text:"Success is the sum of small efforts repeated day in and day out.", attr:"Robert Collier" },
+  { text:"Excellence is not a destination but a continuous journey that never ends.", attr:"" },
+  // Medical school specific
+  { text:"Every patient you'll ever treat is counting on the version of you that didn't quit.", attr:"" },
+  { text:"You chose medicine because you wanted to matter. Remember that on the hard days.", attr:"" },
+  { text:"The exam is just a gate. What you become getting through it is what actually counts.", attr:"" },
+  { text:"Medicine is hard because it has to be. Patients can't afford for it to be easy.", attr:"" },
+  { text:"Your future patients don't know your name yet, but they're already counting on you.", attr:"" },
+  { text:"The road is long, but so is the reward.", attr:"" },
+  { text:"One more question. One more page. One more day closer.", attr:"" },
+  // Stoic / philosophical
+  { text:"You have power over your mind, not outside events. Realize this, and you will find strength.", attr:"Marcus Aurelius" },
+  { text:"Waste no more time arguing what a good man should be. Be one.", attr:"Marcus Aurelius" },
+  { text:"It is not the mountain we conquer, but ourselves.", attr:"Edmund Hillary" },
+  { text:"The impediment to action advances action. What stands in the way becomes the way.", attr:"Marcus Aurelius" },
+  { text:"He who fears death will never do anything worthy of a living man.", attr:"Seneca" },
+  { text:"Difficulties strengthen the mind as labor does the body.", attr:"Seneca" },
+  { text:"We suffer more in imagination than in reality.", attr:"Seneca" },
+  { text:"It does not matter how slowly you go as long as you do not stop.", attr:"Confucius" },
+  // Competition / identity
+  { text:"I hated every minute of training, but I said: don't quit. Suffer now and live the rest of your life as a champion.", attr:"Muhammad Ali" },
+  { text:"If you're not tired, you're not working hard enough.", attr:"" },
+  { text:"The only person you are destined to become is the person you decide to be.", attr:"Ralph Waldo Emerson" },
+  { text:"Do not go where the path may lead; go instead where there is no path and leave a trail.", attr:"Ralph Waldo Emerson" },
+  { text:"Talent is cheaper than table salt. What separates the talented individual from the successful one is hard work.", attr:"Stephen King" },
+  { text:"Great works are performed not by strength but by perseverance.", attr:"Samuel Johnson" },
+  { text:"The secret of getting ahead is getting started.", attr:"Mark Twain" },
+  { text:"Don't count the days. Make the days count.", attr:"Muhammad Ali" },
+  { text:"Energy and persistence conquer all things.", attr:"Benjamin Franklin" },
+  { text:"I am not a product of my circumstances. I am a product of my decisions.", attr:"Stephen Covey" },
+];
+
+let focusQuoteIdx = Math.floor(Math.random() * ALL_QUOTES.length);
+let focusQuoteTimer = null;
+let focusRightMode = 'playlists'; // 'playlists' | 'quotes'
+
 function injectSpotifyTab() {
   const tabBar = document.querySelector('.tab-bar');
   const app    = document.getElementById('app');
@@ -3157,7 +3187,7 @@ function injectSpotifyTab() {
     const btn = document.createElement('button');
     btn.className = 'tab-btn'; btn.id = 'btn-focus';
     btn.onclick = () => showTab('focus');
-    btn.innerHTML = '♫ Focus';
+    btn.innerHTML = 'Focus';
     tabBar.appendChild(btn);
   }
 
@@ -3171,9 +3201,6 @@ function injectSpotifyTab() {
         <div class="sp-card">
           <div class="dash-head" style="margin-bottom:.85rem">
             <div class="dash-title">Now Playing</div>
-            <div id="sp-status-dot" style="display:none">
-              <div class="sp-dot"></div>
-            </div>
           </div>
           <div id="sp-main-content">
             <div class="sp-idle">Not connected to Spotify</div>
@@ -3183,33 +3210,35 @@ function injectSpotifyTab() {
           </div>
         </div>
 
-        <!-- POMODORO + MOODS -->
+        <!-- RIGHT PANEL: PLAYLISTS or QUOTES -->
         <div class="pom-card">
-          <div class="dash-title" style="margin-bottom:.6rem">Pomodoro</div>
-
-          <div class="pom-settings" id="pom-settings-row">
-            <div>
-              <div class="pom-set-label">Work (min)</div>
-              <input class="input" type="number" id="pom-work-inp" value="45" min="1" max="180" style="text-align:center">
-            </div>
-            <div>
-              <div class="pom-set-label">Break (min)</div>
-              <input class="input" type="number" id="pom-break-inp" value="15" min="1" max="60" style="text-align:center">
+          <!-- Toggle -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.85rem">
+            <div class="dash-title" id="focus-right-title">Playlists</div>
+            <div style="display:flex;gap:3px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--r-sm);padding:3px">
+              <button class="advisor-tab-btn active" id="focus-btn-playlists" onclick="setFocusRight('playlists')">Playlists</button>
+              <button class="advisor-tab-btn" id="focus-btn-quotes" onclick="setFocusRight('quotes')">Quotes</button>
             </div>
           </div>
 
-          <div class="pom-display">
-            <div class="pom-time" id="pom-time">45:00</div>
-            <div class="pom-phase" id="pom-phase">Work</div>
+          <!-- Playlists panel -->
+          <div id="focus-playlists-panel">
+            <div id="sp-playlists-list">
+              <div class="sp-idle" style="padding:1rem 0">Connect Spotify to see your playlists</div>
+            </div>
           </div>
 
-          <div class="pom-controls">
-            <button class="pom-btn" onclick="pomReset()">Reset</button>
-            <button class="pom-btn primary" id="pom-start-btn" onclick="pomToggle()">Start</button>
+          <!-- Quotes panel -->
+          <div id="focus-quotes-panel" style="display:none">
+            <div style="min-height:200px;display:flex;flex-direction:column;justify-content:center;padding:.5rem 0">
+              <div id="focus-quote-text" style="font-family:var(--font-display);font-style:italic;font-size:1.05rem;color:var(--text-secondary);line-height:1.8;transition:opacity .5s ease;margin-bottom:.85rem"></div>
+              <div id="focus-quote-attr" style="font-family:var(--font-mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);transition:opacity .5s ease"></div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:.5rem">
+              <button class="btn btn-ghost btn-sm" onclick="prevFocusQuote()">‹ Prev</button>
+              <button class="btn btn-ghost btn-sm" onclick="nextFocusQuote()">Next ›</button>
+            </div>
           </div>
-
-          <div class="section-label" style="margin:.85rem 0 .6rem">Study Moods</div>
-          <div class="mood-grid" id="mood-grid"></div>
         </div>
 
       </div>
@@ -3217,39 +3246,123 @@ function injectSpotifyTab() {
     app.appendChild(panel);
   }
 
-  renderMoodGrid();
+  // Hidden pom inputs for header widget
+  if (!document.getElementById('pom-work-inp')) {
+    const hidden = document.createElement('div');
+    hidden.style.display = 'none';
+    hidden.innerHTML = `
+      <input type="number" id="pom-work-inp"  value="45" min="1" max="180">
+      <input type="number" id="pom-break-inp" value="15" min="1" max="60">
+    `;
+    document.body.appendChild(hidden);
+  }
 }
 
-// ── Mood buttons ──────────────────────────────────────────
-const MOODS = [
-  { label:'🧠 Deep Focus',    query:'deep focus study music' },
-  { label:'☕ Lo-Fi',         query:'lofi hip hop study beats' },
-  { label:'🎹 Classical',     query:'classical music studying concentration' },
-  { label:'⚡ High Energy',   query:'high energy study motivation' },
-  { label:'🌙 Low Energy',    query:'calm ambient focus music' },
-  { label:'🎷 Jazz',          query:'jazz study music concentration' },
-  { label:'🌊 White Noise',   query:'white noise focus study' },
-  { label:'💊 OB Grind',      query:'intense study focus playlist' },
-  { label:'❤️ Cardio Block',  query:'upbeat instrumental workout study' },
-];
-
-function renderMoodGrid() {
-  const grid = document.getElementById('mood-grid');
-  if (!grid) return;
-  grid.innerHTML = MOODS.map(m => `
-    <button class="mood-btn" onclick="openMood('${encodeURIComponent(m.query)}')">
-      ${m.label}
-    </button>
-  `).join('');
+// ── Focus right panel toggle ──────────────────────────────
+function setFocusRight(mode) {
+  focusRightMode = mode;
+  document.getElementById('focus-btn-playlists')?.classList.toggle('active', mode === 'playlists');
+  document.getElementById('focus-btn-quotes')?.classList.toggle('active', mode === 'quotes');
+  document.getElementById('focus-playlists-panel').style.display = mode === 'playlists' ? 'block' : 'none';
+  document.getElementById('focus-quotes-panel').style.display    = mode === 'quotes'    ? 'block' : 'none';
+  document.getElementById('focus-right-title').textContent = mode === 'playlists' ? 'Playlists' : 'Quotes';
+  if (mode === 'quotes') startFocusQuotes();
+  else stopFocusQuotes();
 }
 
-function openMood(encodedQuery) {
-  const q = decodeURIComponent(encodedQuery);
-  const spotifySearch = `spotify:search:${encodeURIComponent(q)}`;
-  const webFallback   = `https://open.spotify.com/search/${encodeURIComponent(q)}`;
-  // Try to open Spotify app first, fallback to web
-  window.location.href = spotifySearch;
-  setTimeout(() => { window.open(webFallback, '_blank'); }, 1200);
+// ── Quotes ────────────────────────────────────────────────
+function showFocusQuote(idx) {
+  const qt = document.getElementById('focus-quote-text');
+  const qa = document.getElementById('focus-quote-attr');
+  if (!qt || !qa) return;
+  qt.style.opacity = '0'; qa.style.opacity = '0';
+  setTimeout(() => {
+    const q = ALL_QUOTES[idx];
+    qt.textContent = '“' + q.text + '”';
+    qa.textContent = q.attr ? '— ' + q.attr : '';
+    qt.style.opacity = '1'; qa.style.opacity = '1';
+  }, 500);
+}
+
+function nextFocusQuote() {
+  focusQuoteIdx = (focusQuoteIdx + 1) % ALL_QUOTES.length;
+  showFocusQuote(focusQuoteIdx);
+  resetFocusQuoteTimer();
+}
+
+function prevFocusQuote() {
+  focusQuoteIdx = (focusQuoteIdx - 1 + ALL_QUOTES.length) % ALL_QUOTES.length;
+  showFocusQuote(focusQuoteIdx);
+  resetFocusQuoteTimer();
+}
+
+function startFocusQuotes() {
+  showFocusQuote(focusQuoteIdx);
+  focusQuoteTimer = setInterval(nextFocusQuote, 10000);
+}
+
+function stopFocusQuotes() {
+  clearInterval(focusQuoteTimer);
+  focusQuoteTimer = null;
+}
+
+function resetFocusQuoteTimer() {
+  clearInterval(focusQuoteTimer);
+  focusQuoteTimer = setInterval(nextFocusQuote, 10000);
+}
+
+// ── Playlists ─────────────────────────────────────────────
+async function fetchSpotifyPlaylists() {
+  if (!spToken) return;
+  const container = document.getElementById('sp-playlists-list');
+  if (!container) return;
+  try {
+    const resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=20', {
+      headers: { 'Authorization': `Bearer ${spToken}` }
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (!data.items?.length) {
+      container.innerHTML = '<div class="sp-idle" style="padding:.5rem 0">No playlists found</div>';
+      return;
+    }
+    container.innerHTML = '';
+    data.items.forEach(pl => {
+      if (!pl) return;
+      const img = pl.images?.[0]?.url || '';
+      const div = document.createElement('div');
+      div.style.cssText = 'display:flex;align-items:center;gap:10px;padding:.45rem .5rem;border-radius:var(--r-sm);cursor:pointer;transition:background .12s;border:1px solid transparent';
+      div.onmouseenter = () => { div.style.background = 'var(--bg-elevated)'; div.style.borderColor = 'var(--border)'; };
+      div.onmouseleave = () => { div.style.background = ''; div.style.borderColor = 'transparent'; };
+      div.innerHTML = `
+        ${img ? `<img src="${escH(img)}" style="width:38px;height:38px;border-radius:4px;object-fit:cover;flex-shrink:0">` : '<div style="width:38px;height:38px;border-radius:4px;background:var(--bg-elevated);flex-shrink:0"></div>'}
+        <div style="min-width:0">
+          <div style="font-family:var(--font-mono);font-size:.75rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(pl.name)}</div>
+          <div style="font-family:var(--font-mono);font-size:.6rem;color:var(--text-tertiary)">${pl.tracks?.total || 0} tracks</div>
+        </div>
+        <div style="margin-left:auto;font-size:.9rem;color:var(--text-tertiary)">▶</div>
+      `;
+      div.onclick = () => playSpotifyPlaylist(pl.uri, pl.name);
+      container.appendChild(div);
+    });
+  } catch(e) { console.warn('Playlists fetch:', e); }
+}
+
+async function playSpotifyPlaylist(uri, name) {
+  if (!spToken) return;
+  const body = { context_uri: uri };
+  if (spDeviceId) body.device_id = spDeviceId;
+  try {
+    await fetch('https://api.spotify.com/v1/me/player/play', {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${spToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    setTimeout(fetchNowPlaying, 800);
+  } catch(e) {
+    // Fallback: open in Spotify app
+    window.open(`https://open.spotify.com/playlist/${uri.split(':')[2]}`, '_blank');
+  }
 }
 
 // ── Spotify Auth (PKCE) ───────────────────────────────────
@@ -3393,6 +3506,7 @@ function initSpotifyPlayer() {
 function startSpotifyPoll() {
   clearInterval(spPollTimer);
   fetchNowPlaying();
+  fetchSpotifyPlaylists();
   spPollTimer = setInterval(fetchNowPlaying, 5000);
 }
 
@@ -3448,15 +3562,15 @@ function renderNowPlaying(data) {
 }
 
 function renderNowPlayingDirect(info) {
+  updateHeaderWidget(info);
+  renderFocusTabNowPlaying(info);
+}
+
+function renderFocusTabNowPlaying(info) {
   const container = document.getElementById('sp-main-content');
-  const dot       = document.getElementById('sp-status-dot');
   if (!container) return;
 
-  // Update header mini widget
-  updateHeaderWidget(info);
-
   if (!info) {
-    if (dot) dot.style.display = 'none';
     container.innerHTML = `
       <div class="sp-idle">Nothing playing right now</div>
       <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem;background:var(--bg-elevated);color:var(--text-secondary);border:1px solid var(--border)">
@@ -3466,64 +3580,143 @@ function renderNowPlayingDirect(info) {
     return;
   }
 
-  if (dot) dot.style.display = 'flex';
-
   const pct = info.duration ? Math.round((info.progress / info.duration) * 100) : 0;
-  const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
+  const fmt = ms => { const s=Math.floor(ms/1000); return \`\${Math.floor(s/60)}:\${String(s%60).padStart(2,'0')}\`; };
 
-  container.innerHTML = `
-    <img class="sp-art-lg" src="${escH(info.albumArt)}" alt="${escH(info.albumName)}"
+  container.innerHTML = \`
+    <img class="sp-art-lg" src="\${escH(info.albumArt)}" alt="\${escH(info.albumName)}"
          onerror="this.style.background='var(--bg-elevated)'">
-    <div class="sp-track-lg">${escH(info.trackName)}</div>
-    <div class="sp-artist-lg">${escH(info.artistName)}</div>
+    <div class="sp-track-lg">\${escH(info.trackName)}</div>
+    <div class="sp-artist-lg">\${escH(info.artistName)}</div>
     <div class="sp-progress-wrap">
-      <div class="sp-progress-bar" style="width:${pct}%"></div>
+      <div class="sp-progress-bar" style="width:\${pct}%"></div>
     </div>
     <div class="sp-time-row">
-      <span>${fmt(info.progress)}</span>
-      <span>${fmt(info.duration)}</span>
+      <span>\${fmt(info.progress)}</span>
+      <span>\${fmt(info.duration)}</span>
     </div>
     <div class="sp-controls">
       <button class="sp-ctrl-btn" onclick="spPrev()" title="Previous">⏮</button>
-      <button class="sp-ctrl-btn play" onclick="spPlayPause()" title="${info.isPlaying?'Pause':'Play'}">
-        ${info.isPlaying ? '⏸' : '▶'}
+      <button class="sp-ctrl-btn play" onclick="spPlayPause()" title="\${info.isPlaying?'Pause':'Play'}">
+        \${info.isPlaying ? '⏸' : '▶'}
       </button>
       <button class="sp-ctrl-btn" onclick="spNext()" title="Next">⏭</button>
+    </div>
+  \`;
+}
+
+// ── Header widget (Spotify + Pomodoro) ───────────────────
+function updateHeaderWidget(info) {
+  ensureHeaderWidgets(info);
+  const spSection = document.getElementById('sp-header-section');
+  if (!spSection) return;
+
+  if (!info) {
+    spSection.innerHTML = `
+      <button class="hdr-sp-connect" onclick="spotifyLogin()">♫ Connect Spotify</button>
+    `;
+    return;
+  }
+
+  const playIcon = info.isPlaying ? '⏸' : '▶';
+  spSection.innerHTML = `
+    <img class="hdr-art" src="${escH(info.albumArt)}" alt="art" onerror="this.style.opacity='.3'">
+    <div class="hdr-track-info">
+      <div class="hdr-track-name">${escH(info.trackName)}</div>
+      <div class="hdr-artist-name">${escH(info.artistName)}</div>
+    </div>
+    ${info.isPlaying ? '<div class="hdr-sp-dot"></div>' : ''}
+    <div class="hdr-sp-controls">
+      <button class="hdr-sp-btn" onclick="spPrev()" title="Previous">⏮</button>
+      <button class="hdr-sp-btn play" onclick="spPlayPause()" title="${info.isPlaying?'Pause':'Play'}">${playIcon}</button>
+      <button class="hdr-sp-btn" onclick="spNext()" title="Next">⏭</button>
     </div>
   `;
 }
 
-// ── Header mini widget ────────────────────────────────────
-function updateHeaderWidget(info) {
-  let widget = document.getElementById('sp-header-widget');
+function ensureHeaderWidgets(info) {
   const headerRight = document.querySelector('.header-right');
   if (!headerRight) return;
 
-  if (!info) {
-    if (widget) widget.remove();
-    return;
-  }
-
-  if (!widget) {
-    widget = document.createElement('div');
-    widget.id = 'sp-header-widget';
-    widget.onclick = () => showTab('focus');
-    widget.style.cursor = 'pointer';
-    // Insert before save-status
+  // Spotify section
+  if (!document.getElementById('sp-header-section')) {
+    const spDiv = document.createElement('div');
+    spDiv.id = 'sp-header-section';
+    spDiv.className = 'hdr-sp-section';
     const saveStatus = document.getElementById('save-status');
-    headerRight.insertBefore(widget, saveStatus);
+    headerRight.insertBefore(spDiv, saveStatus);
   }
 
-  widget.innerHTML = `
-    <div class="sp-now-playing">
-      ${info.albumArt ? `<img class="sp-art-sm" src="${escH(info.albumArt)}" alt="art">` : '<div class="sp-art-sm"></div>'}
-      <div>
-        <div class="sp-track-sm">${escH(info.trackName)}</div>
-        <div class="sp-artist-sm">${escH(info.artistName)}</div>
+  // Pomodoro section
+  if (!document.getElementById('pom-header-section')) {
+    const pomDiv = document.createElement('div');
+    pomDiv.id = 'pom-header-section';
+    pomDiv.className = 'hdr-pom-section';
+    pomDiv.innerHTML = `
+      <div class="hdr-pom-inner">
+        <div class="hdr-pom-time" id="hdr-pom-time">45:00</div>
+        <div class="hdr-pom-phase" id="hdr-pom-phase">Work</div>
       </div>
-      <div class="sp-dot"></div>
-    </div>
-  `;
+      <div class="hdr-pom-btns">
+        <button class="hdr-pom-btn" id="hdr-pom-start" onclick="pomToggle()" title="Start/Pause">▶</button>
+        <button class="hdr-pom-btn" onclick="pomReset()" title="Reset">↺</button>
+        <button class="hdr-pom-btn" onclick="pomOpenEdit()" title="Edit">✎</button>
+      </div>
+    `;
+    const saveStatus = document.getElementById('save-status');
+    headerRight.insertBefore(pomDiv, saveStatus);
+  }
+
+  // Edit popover for pomodoro
+  if (!document.getElementById('pom-edit-pop')) {
+    const pop = document.createElement('div');
+    pop.id = 'pom-edit-pop';
+    pop.className = 'pom-edit-pop';
+    pop.style.display = 'none';
+    pop.innerHTML = `
+      <div style="display:flex;gap:10px;align-items:flex-end">
+        <div>
+          <div class="pom-set-label">Work (min)</div>
+          <input class="input" type="number" id="pom-work-inp" value="45" min="1" max="180" style="width:70px;text-align:center">
+        </div>
+        <div>
+          <div class="pom-set-label">Break (min)</div>
+          <input class="input" type="number" id="pom-break-inp" value="15" min="1" max="60" style="width:70px;text-align:center">
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="pomSaveEdit()">Set</button>
+        <button class="btn btn-ghost btn-sm" onclick="pomCloseEdit()">✕</button>
+      </div>
+    `;
+    document.body.appendChild(pop);
+    // Close on outside click
+    document.addEventListener('click', e => {
+      const pop = document.getElementById('pom-edit-pop');
+      const btn = document.getElementById('pom-header-section');
+      if (pop && pop.style.display !== 'none' && !pop.contains(e.target) && !btn?.contains(e.target)) {
+        pomCloseEdit();
+      }
+    });
+  }
+}
+
+function pomOpenEdit() {
+  const pop = document.getElementById('pom-edit-pop');
+  const sec = document.getElementById('pom-header-section');
+  if (!pop || !sec) return;
+  const rect = sec.getBoundingClientRect();
+  pop.style.display = 'block';
+  pop.style.top  = (rect.bottom + 8) + 'px';
+  pop.style.right = (window.innerWidth - rect.right) + 'px';
+}
+
+function pomCloseEdit() {
+  const pop = document.getElementById('pom-edit-pop');
+  if (pop) pop.style.display = 'none';
+}
+
+function pomSaveEdit() {
+  pomCloseEdit();
+  pomReset();
 }
 
 // ── Playback controls ─────────────────────────────────────
@@ -3629,26 +3822,30 @@ function pomReset() {
   pomRunning = false;
   pomPhase = 'work';
   pomSecondsLeft = pomGetWork();
-  document.getElementById('pom-start-btn').textContent = 'Start';
   pomRender();
 }
 
 function pomRender() {
   const mins = Math.floor(pomSecondsLeft / 60);
   const secs = pomSecondsLeft % 60;
-  const timeEl  = document.getElementById('pom-time');
-  const phaseEl = document.getElementById('pom-phase');
-  const btnEl   = document.getElementById('pom-start-btn');
-  if (timeEl)  timeEl.textContent  = `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
-  if (phaseEl) { phaseEl.textContent = pomPhase === 'work' ? 'Work' : 'Break'; phaseEl.className = 'pom-phase' + (pomPhase === 'break' ? ' break' : ''); }
-  if (btnEl && !pomRunning) btnEl.textContent = pomRunning ? 'Pause' : (pomSecondsLeft < pomGetWork() && pomPhase === 'work' ? 'Resume' : 'Start');
+  const timeStr = `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+  const phaseStr = pomPhase === 'work' ? 'Work' : 'Break';
+
+  // Update header pomodoro display
+  const hdrTime  = document.getElementById('hdr-pom-time');
+  const hdrPhase = document.getElementById('hdr-pom-phase');
+  const hdrStart = document.getElementById('hdr-pom-start');
+  if (hdrTime)  hdrTime.textContent  = timeStr;
+  if (hdrPhase) { hdrPhase.textContent = phaseStr; hdrPhase.className = 'hdr-pom-phase' + (pomPhase === 'break' ? ' break' : ''); }
+  if (hdrStart) hdrStart.textContent = pomRunning ? '⏸' : '▶';
+
   // Update tab title while running
-  if (pomRunning) document.title = `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')} · Step 2`;
+  if (pomRunning) document.title = `${timeStr} · Step 2`;
   else document.title = 'Step 2 — Study Dashboard';
 }
 
-// Init pom display on load
-document.addEventListener('DOMContentLoaded', () => {
+// Init pom — called after header widgets are injected
+function initPomDisplay() {
   pomSecondsLeft = pomGetWork();
   pomRender();
-});
+}
