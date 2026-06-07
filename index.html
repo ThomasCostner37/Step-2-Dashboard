@@ -139,12 +139,6 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.2) sepia
   content: ''; position: absolute; left: 0; top: 4px; bottom: 4px;
   width: 2px; background: var(--accent); border-radius: 1px;
 }
-.tab-shortcut {
-  font-size: .52rem; padding: 1px 4px;
-  border: 1px solid var(--border); border-radius: 3px;
-  color: var(--text-tertiary); line-height: 1.5;
-}
-.tab-btn.active .tab-shortcut { border-color: var(--border-bright); color: var(--accent-text); opacity: .55; }
 
 /* ── TAB PANELS ──────────────────────────────────── */
 .tab-panel { display: none; }
@@ -514,7 +508,6 @@ select.input { cursor: pointer; }
 /* ── RESPONSIVE ──────────────────────────────────── */
 @media (max-width: 580px) {
   #app { padding: 0 14px 60px; }
-  .tab-shortcut { display: none; }
   .cd-num { font-size: 2.2rem; }
   .assess-entry { grid-template-columns: 1fr auto auto; }
 }
@@ -585,11 +578,11 @@ select.input { cursor: pointer; }
   </div>
 
   <div class="tab-bar">
-    <button class="tab-btn active" onclick="showTab('dashboard')" id="btn-dashboard">Dashboard<span class="tab-shortcut">⌘1</span></button>
-    <button class="tab-btn" onclick="showTab('topics')" id="btn-topics">Topic List<span class="tab-shortcut">⌘2</span></button>
-    <button class="tab-btn" onclick="showTab('assessments')" id="btn-assessments">Assessments<span class="tab-shortcut">⌘3</span></button>
-    <button class="tab-btn" onclick="showTab('missed')" id="btn-missed">Missed Qs<span class="tab-shortcut">⌘4</span></button>
-    <button class="tab-btn" onclick="showTab('notes')" id="btn-notes">Notes<span class="tab-shortcut">⌘5</span></button>
+    <button class="tab-btn active" onclick="showTab('dashboard')" id="btn-dashboard">Dashboard</button>
+    <button class="tab-btn" onclick="showTab('topics')" id="btn-topics">Topic List</button>
+    <button class="tab-btn" onclick="showTab('assessments')" id="btn-assessments">Assessments</button>
+    <button class="tab-btn" onclick="showTab('missed')" id="btn-missed">Missed Qs</button>
+    <button class="tab-btn" onclick="showTab('notes')" id="btn-notes">Notes</button>
   </div>
 
   <!-- DASHBOARD (rebuilt by app.js) -->
