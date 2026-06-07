@@ -3118,6 +3118,8 @@ const SPOTIFY_SCOPES      = [
   'streaming',
   'user-read-email',
   'user-read-private',
+  'playlist-read-private',
+  'playlist-read-collaborative',
 ].join(' ');
 
 let spToken        = null;
@@ -3248,8 +3250,8 @@ function injectSpotifyTab() {
           <!-- Quotes panel -->
           <div id="focus-quotes-panel" style="display:none;flex:1">
             <div style="min-height:180px;display:flex;flex-direction:column;justify-content:center;padding:.5rem 0">
-              <div id="focus-quote-text" style="font-family:var(--font-display);font-style:italic;font-size:1.05rem;color:var(--text-secondary);line-height:1.8;transition:opacity .5s ease;margin-bottom:.85rem"></div>
-              <div id="focus-quote-attr" style="font-family:var(--font-mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);transition:opacity .5s ease"></div>
+              <div id="focus-quote-text" style="font-family:var(--font-display);font-style:italic;font-size:1.45rem;color:var(--text-secondary);line-height:1.75;transition:opacity .5s ease;margin-bottom:1rem;text-align:center"></div>
+              <div id="focus-quote-attr" style="font-family:var(--font-mono);font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);transition:opacity .5s ease;text-align:center"></div>
             </div>
             <div style="display:flex;gap:8px;margin-top:.5rem">
               <button class="btn btn-ghost btn-sm" onclick="prevFocusQuote()">‹ Prev</button>
