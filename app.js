@@ -239,12 +239,7 @@ window.onload = function () {
       client_id: CLIENT_ID,
       scope: SCOPES,
       callback: async (resp) => {
-       if (resp.error) {
-      if (resp.error === 'user_logged_out' || resp.error === 'interaction_required' || resp.error === 'access_denied') {
-        tokenClient.requestAccessToken({ prompt: 'select_account' });
-      }
-      return;
-    }
+        if (resp.error) { console.log('GIS:', resp.error); return; }
         const token = resp.access_token;
         gapi.client.setToken({ access_token: token });
         // Persist token + expiry so reload is silent
@@ -3586,28 +3581,28 @@ function renderFocusTabNowPlaying(info) {
   }
 
   const pct = info.duration ? Math.round((info.progress / info.duration) * 100) : 0;
-  const fmt = ms => { const s=Math.floor(ms/1000); return \`\${Math.floor(s/60)}:\${String(s%60).padStart(2,'0')}\`; };
+  const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
 
-  container.innerHTML = \`
-    <img class="sp-art-lg" src="\${escH(info.albumArt)}" alt="\${escH(info.albumName)}"
+  container.innerHTML = `
+    <img class="sp-art-lg" src="${escH(info.albumArt)}" alt="${escH(info.albumName)}"
          onerror="this.style.background='var(--bg-elevated)'">
-    <div class="sp-track-lg">\${escH(info.trackName)}</div>
-    <div class="sp-artist-lg">\${escH(info.artistName)}</div>
+    <div class="sp-track-lg">${escH(info.trackName)}</div>
+    <div class="sp-artist-lg">${escH(info.artistName)}</div>
     <div class="sp-progress-wrap">
-      <div class="sp-progress-bar" style="width:\${pct}%"></div>
+      <div class="sp-progress-bar" style="width:${pct}%"></div>
     </div>
     <div class="sp-time-row">
-      <span>\${fmt(info.progress)}</span>
-      <span>\${fmt(info.duration)}</span>
+      <span>${fmt(info.progress)}</span>
+      <span>${fmt(info.duration)}</span>
     </div>
     <div class="sp-controls">
       <button class="sp-ctrl-btn" onclick="spPrev()" title="Previous">⏮</button>
-      <button class="sp-ctrl-btn play" onclick="spPlayPause()" title="\${info.isPlaying?'Pause':'Play'}">
-        \${info.isPlaying ? '⏸' : '▶'}
+      <button class="sp-ctrl-btn play" onclick="spPlayPause()" title="${info.isPlaying?'Pause':'Play'}">
+        ${info.isPlaying ? '⏸' : '▶'}
       </button>
       <button class="sp-ctrl-btn" onclick="spNext()" title="Next">⏭</button>
     </div>
-  \`;
+  `;
 }
 
 // ── Header widget (Spotify + Pomodoro) ───────────────────
