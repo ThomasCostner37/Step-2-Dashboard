@@ -239,7 +239,12 @@ window.onload = function () {
       client_id: CLIENT_ID,
       scope: SCOPES,
       callback: async (resp) => {
-        if (resp.error) { console.log('GIS:', resp.error); return; }
+       if (resp.error) {
+      if (resp.error === 'user_logged_out' || resp.error === 'interaction_required' || resp.error === 'access_denied') {
+        tokenClient.requestAccessToken({ prompt: 'select_account' });
+      }
+      return;
+    }
         const token = resp.access_token;
         gapi.client.setToken({ access_token: token });
         // Persist token + expiry so reload is silent
