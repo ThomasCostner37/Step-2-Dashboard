@@ -2781,11 +2781,18 @@ function normalizeCalendarItems() {
   const peIds = (state.practiceExams || []).map(p => p.id);
   state.calendarItems = state.calendarItems.filter(c => !c.peId || peIds.includes(c.peId));
 
+  // Remove malformed items (no valid date, or legacy "hey" placeholder)
+  state.calendarItems = state.calendarItems.filter(c => {
+    if (!c.date || typeof c.date !== 'string' || c.date.length < 8) return false;
+    if (c.title === 'hey') return false;
+    return true;
+  });
+
   // Ensure all items have required fields
   state.calendarItems.forEach(c => {
     if (!c.id)   c.id   = uid();
     if (!c.type) c.type = 'study';
-    if (!c.end)  c.end  = c.date;
+    if (!c.end || c.end < c.date)  c.end = c.date;
   });
 }
 
@@ -2874,15 +2881,16 @@ function renderCalendar() {
       const extra = dayEvts.length - shown.length;
 
       shown.forEach(evt => {
+        const evtEnd  = (evt.end && evt.end >= evt.date) ? evt.end : evt.date;
+        const isMulti = evt.date !== evtEnd;
         const isStart = evt.date === date;
-        const isEnd   = (evt.end || evt.date) === date;
-        const isMulti = evt.date !== (evt.end || evt.date);
+        const isEnd   = evtEnd === date;
         let cls = `cal-evt cal-type-${evt.type}`;
         if (evt.locked) cls += ' locked';
         if (isMulti && !isStart && !isEnd) cls += ' cal-evt-cont-mid';
-        else if (isMulti && !isStart) cls += ' cal-evt-cont-left';
-        else if (isMulti && !isEnd)   cls += ' cal-evt-cont-right';
-        const label = isStart ? escH(evt.title) : (isMulti ? '&nbsp;' : escH(evt.title));
+        else if (isMulti && !isStart)      cls += ' cal-evt-cont-left';
+        else if (isMulti && !isEnd)        cls += ' cal-evt-cont-right';
+        const label = (isStart || !isMulti) ? escH(evt.title) : '&nbsp;';
         eventsHTML += `<div class="${cls}" data-evtid="${evt.id}" onclick="event.stopPropagation();openCalPopover(event,'${evt.id}')">${label}</div>`;
       });
 
