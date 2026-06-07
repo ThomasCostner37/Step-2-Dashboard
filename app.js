@@ -3184,7 +3184,7 @@ const ALL_QUOTES = [
 
 let focusQuoteIdx = Math.floor(Math.random() * ALL_QUOTES.length);
 let focusQuoteTimer = null;
-let focusRightMode = 'playlists'; // 'playlists' | 'quotes'
+let focusRightMode = 'playlists'; // 'playlists' | 'focus'
 
 function injectSpotifyTab() {
   const tabBar = document.querySelector('.tab-bar');
