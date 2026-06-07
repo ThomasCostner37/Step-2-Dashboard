@@ -541,6 +541,66 @@ function injectStyles() {
     }
     .btn-xs.active { color:var(--accent-text); border-color:rgba(176,120,48,.35); background:var(--accent-glow); }
     .epc-rot-btn.active { color:var(--accent-text) !important; border-color:rgba(176,120,48,.35) !important; background:var(--accent-glow) !important; }
+
+    /* ── CALENDAR ── */
+    .cal-card { padding-bottom:1.2rem; }
+    .cal-dow-row { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; margin-bottom:4px; }
+    .cal-dow { font-family:var(--font-mono); font-size:.6rem; text-align:center; color:var(--text-tertiary);
+               text-transform:uppercase; letter-spacing:.06em; padding:.3rem 0; }
+    .cal-weeks { display:flex; flex-direction:column; gap:2px; }
+    .cal-week  { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+    .cal-day   { min-height:74px; border:1px solid var(--border); border-radius:var(--r-sm);
+                 background:var(--bg-card); padding:4px 5px; cursor:pointer;
+                 transition:border-color .12s; position:relative; overflow:hidden; }
+    .cal-day:hover { border-color:var(--border-bright); background:var(--bg-subtle); }
+    .cal-day.other-month { background:var(--bg-base); }
+    .cal-day.other-month .cal-day-num { color:var(--text-tertiary); opacity:.45; }
+    .cal-day.is-today { border-color:var(--accent); }
+    .cal-day.is-today .cal-day-num { color:var(--accent); font-weight:700; }
+    .cal-day-num { font-family:var(--font-mono); font-size:.68rem; color:var(--text-secondary);
+                   line-height:1; margin-bottom:3px; }
+    .cal-events { display:flex; flex-direction:column; gap:2px; }
+    .cal-evt { font-family:var(--font-mono); font-size:.58rem; padding:1px 5px;
+               border-radius:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+               cursor:pointer; transition:opacity .12s; line-height:1.5; }
+    .cal-evt:hover { opacity:.8; }
+    .cal-evt-more { font-family:var(--font-mono); font-size:.55rem; color:var(--text-tertiary);
+                    padding:1px 3px; cursor:pointer; }
+    .cal-evt-cont-left  { border-radius:0 3px 3px 0; margin-left:-5px; padding-left:3px; }
+    .cal-evt-cont-right { border-radius:3px 0 0 3px; margin-right:-5px; padding-right:3px; }
+    .cal-evt-cont-mid   { border-radius:0; margin-left:-5px; margin-right:-5px; padding-left:3px; padding-right:3px; }
+
+    /* Event type colors */
+    .cal-type-exam     { background:#FCEBEB; color:#A32D2D; border-left:2px solid #E24B4A; }
+    .cal-type-study    { background:var(--accent-glow); color:var(--accent-text); border-left:2px solid var(--accent); }
+    .cal-type-personal { background:#EEE6F8; color:#6B3FA0; border-left:2px solid #9B6DD6; }
+    .cal-type-rotation { background:#E3F2E8; color:#2A6B3A; border-left:2px solid #4CAF6B; }
+    .cal-type-exam.locked { opacity:.75; cursor:default; }
+
+    /* Calendar event popover */
+    .cal-popover { position:fixed; z-index:150; background:var(--bg-card);
+                   border:1px solid var(--border-bright); border-radius:var(--r-lg);
+                   box-shadow:0 8px 28px rgba(0,0,0,.14); padding:1rem 1.1rem;
+                   width:280px; }
+    .cal-pop-title { font-family:var(--font-display); font-size:.95rem; font-weight:700;
+                     color:var(--text-primary); margin-bottom:.75rem; }
+    .cal-pop-row { display:flex; flex-direction:column; gap:3px; margin-bottom:.6rem; }
+    .cal-pop-label { font-family:var(--font-mono); font-size:.58rem; text-transform:uppercase;
+                     letter-spacing:.08em; color:var(--text-tertiary); }
+    .cal-type-btns { display:flex; gap:4px; flex-wrap:wrap; margin-top:3px; }
+    .cal-type-btn { font-family:var(--font-mono); font-size:.62rem; padding:3px 9px;
+                    border-radius:3px; border:1px solid var(--border); background:transparent;
+                    color:var(--text-tertiary); cursor:pointer; transition:all .12s; }
+    .cal-type-btn.active { font-weight:600; }
+    .cal-type-btn.exam     { border-color:#E24B4A; }
+    .cal-type-btn.exam.active     { background:#FCEBEB; color:#A32D2D; }
+    .cal-type-btn.study    { border-color:var(--accent); }
+    .cal-type-btn.study.active    { background:var(--accent-glow); color:var(--accent-text); }
+    .cal-type-btn.personal { border-color:#9B6DD6; }
+    .cal-type-btn.personal.active { background:#EEE6F8; color:#6B3FA0; }
+    .cal-type-btn.rotation { border-color:#4CAF6B; }
+    .cal-type-btn.rotation.active { background:#E3F2E8; color:#2A6B3A; }
+    .cal-pop-acts { display:flex; gap:8px; justify-content:flex-end; margin-top:.75rem; }
   `;
   document.head.appendChild(s);
 }
@@ -634,6 +694,20 @@ function rebuildDashboardShell() {
         </div>
       </div>
     </div>
+
+    <!-- CALENDAR -->
+    <div class="dash-card cal-card" style="margin-top:14px">
+      <div class="dash-head">
+        <div class="dash-title">Calendar</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-ghost btn-xs" onclick="calPrevMonth()">‹</button>
+          <div class="dash-meta" id="cal-month-lbl" style="font-size:.78rem;color:var(--text-primary);font-family:var(--font-display);font-weight:600;min-width:120px;text-align:center"></div>
+          <button class="btn btn-ghost btn-xs" onclick="calNextMonth()">›</button>
+          <button class="btn btn-ghost btn-xs" onclick="calGoToday()">Today</button>
+        </div>
+      </div>
+      <div id="cal-grid"></div>
+    </div>
   `;
 }
 
@@ -709,6 +783,7 @@ function renderAll() {
   renderMissedSessions();
   renderNotes();
   renderSuggestions();
+  renderCalendar();
   setInterval(updateCountdown, 60000);
 }
 
@@ -2667,4 +2742,306 @@ function renderAdvisorSessionLog() {
       </div>
     `).join('')}
   `;
+}
+
+// ============================================================
+// CALENDAR ENGINE
+// ============================================================
+
+let calYear  = new Date().getFullYear();
+let calMonth = new Date().getMonth(); // 0-indexed
+let calPopoverEvtId = null; // currently editing event id
+
+const CAL_TYPES = ['exam','study','personal','rotation'];
+const CAL_TYPE_LABELS = { exam:'Exam', study:'Study', personal:'Personal', rotation:'Rotation' };
+
+// Normalize calendarItems — ensure they have all needed fields
+function normalizeCalendarItems() {
+  if (!Array.isArray(state.calendarItems)) state.calendarItems = [];
+
+  // Pull in practiceExams as locked exam events (sync, don't duplicate)
+  (state.practiceExams || []).forEach(pe => {
+    if (!pe.date) return;
+    const existing = state.calendarItems.find(c => c.peId === pe.id);
+    if (existing) {
+      // Update name/date in case it changed
+      existing.title = pe.name;
+      existing.date  = pe.date;
+      existing.end   = pe.date;
+    } else {
+      state.calendarItems.push({
+        id: uid(), peId: pe.id, title: pe.name,
+        date: pe.date, end: pe.date,
+        type: 'exam', locked: pe.locked || false
+      });
+    }
+  });
+
+  // Remove stale peId events whose exam was deleted
+  const peIds = (state.practiceExams || []).map(p => p.id);
+  state.calendarItems = state.calendarItems.filter(c => !c.peId || peIds.includes(c.peId));
+
+  // Ensure all items have required fields
+  state.calendarItems.forEach(c => {
+    if (!c.id)   c.id   = uid();
+    if (!c.type) c.type = 'study';
+    if (!c.end)  c.end  = c.date;
+  });
+}
+
+function calGoToday() {
+  const now = new Date();
+  calYear  = now.getFullYear();
+  calMonth = now.getMonth();
+  renderCalendar();
+}
+
+function calPrevMonth() {
+  calMonth--;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  renderCalendar();
+}
+
+function calNextMonth() {
+  calMonth++;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const grid = document.getElementById('cal-grid');
+  const lbl  = document.getElementById('cal-month-lbl');
+  if (!grid) return;
+
+  normalizeCalendarItems();
+
+  // Update month label
+  if (lbl) lbl.textContent = new Date(calYear, calMonth, 1)
+    .toLocaleDateString([], { month:'long', year:'numeric' });
+
+  // Build day-of-week header
+  const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html = `<div class="cal-dow-row">${dows.map(d => `<div class="cal-dow">${d}</div>`).join('')}</div>`;
+  html += `<div class="cal-weeks" id="cal-weeks-inner"></div>`;
+  grid.innerHTML = html;
+
+  const weeksEl = document.getElementById('cal-weeks-inner');
+
+  // Figure out calendar grid bounds
+  const firstDay  = new Date(calYear, calMonth, 1);
+  const lastDay   = new Date(calYear, calMonth + 1, 0);
+  const startDow  = firstDay.getDay(); // 0=Sun
+  const today     = new Date().toISOString().slice(0,10);
+
+  // Build array of all days to show (pad with prev/next month days)
+  const days = [];
+  for (let i = 0; i < startDow; i++) {
+    const d = new Date(calYear, calMonth, 1 - (startDow - i));
+    days.push({ date: d.toISOString().slice(0,10), curMonth: false });
+  }
+  for (let d = 1; d <= lastDay.getDate(); d++) {
+    const dt = new Date(calYear, calMonth, d);
+    days.push({ date: dt.toISOString().slice(0,10), curMonth: true });
+  }
+  while (days.length % 7 !== 0) {
+    const last = new Date(days[days.length-1].date + 'T00:00:00');
+    last.setDate(last.getDate() + 1);
+    days.push({ date: last.toISOString().slice(0,10), curMonth: false });
+  }
+
+  // Group into weeks
+  const weeks = [];
+  for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i+7));
+
+  // Render each week
+  weeks.forEach(week => {
+    const weekEl = document.createElement('div');
+    weekEl.className = 'cal-week';
+
+    week.forEach(({ date, curMonth }) => {
+      const dayEl = document.createElement('div');
+      dayEl.className = 'cal-day' +
+        (!curMonth ? ' other-month' : '') +
+        (date === today ? ' is-today' : '');
+      dayEl.dataset.date = date;
+
+      const dayNum = new Date(date + 'T00:00:00').getDate();
+      let eventsHTML = '';
+
+      // Get events that span this date, sorted by start date then by multi-day length
+      const dayEvts = getEventsForDate(date);
+      const shown = dayEvts.slice(0, 3);
+      const extra = dayEvts.length - shown.length;
+
+      shown.forEach(evt => {
+        const isStart = evt.date === date;
+        const isEnd   = (evt.end || evt.date) === date;
+        const isMulti = evt.date !== (evt.end || evt.date);
+        let cls = `cal-evt cal-type-${evt.type}`;
+        if (evt.locked) cls += ' locked';
+        if (isMulti && !isStart && !isEnd) cls += ' cal-evt-cont-mid';
+        else if (isMulti && !isStart) cls += ' cal-evt-cont-left';
+        else if (isMulti && !isEnd)   cls += ' cal-evt-cont-right';
+        const label = isStart ? escH(evt.title) : (isMulti ? '&nbsp;' : escH(evt.title));
+        eventsHTML += `<div class="${cls}" data-evtid="${evt.id}" onclick="event.stopPropagation();openCalPopover(event,'${evt.id}')">${label}</div>`;
+      });
+
+      if (extra > 0) eventsHTML += `<div class="cal-evt-more">+${extra} more</div>`;
+
+      dayEl.innerHTML = `<div class="cal-day-num">${dayNum}</div><div class="cal-events">${eventsHTML}</div>`;
+      dayEl.addEventListener('click', () => openCalPopover(null, null, date));
+      weekEl.appendChild(dayEl);
+    });
+
+    weeksEl.appendChild(weekEl);
+  });
+}
+
+function getEventsForDate(date) {
+  return (state.calendarItems || []).filter(evt => {
+    const start = evt.date;
+    const end   = evt.end || evt.date;
+    return date >= start && date <= end;
+  }).sort((a,b) => a.date.localeCompare(b.date));
+}
+
+// ── Calendar Popover ──────────────────────────────────────
+function openCalPopover(mouseEvent, evtId, defaultDate) {
+  closeCalPopover();
+
+  const isEdit = !!evtId;
+  const evt    = isEdit ? (state.calendarItems || []).find(c => c.id === evtId) : null;
+  if (isEdit && !evt) return;
+  if (isEdit && evt.locked) return; // locked exam events not editable
+
+  calPopoverEvtId = evtId || null;
+
+  const pop = document.createElement('div');
+  pop.id = 'cal-popover';
+  pop.className = 'cal-popover';
+
+  const startVal = evt ? evt.date  : (defaultDate || new Date().toISOString().slice(0,10));
+  const endVal   = evt ? (evt.end || evt.date) : startVal;
+  const typeVal  = evt ? evt.type  : 'study';
+  const titleVal = evt ? evt.title : '';
+
+  pop.innerHTML = `
+    <div class="cal-pop-title">${isEdit ? 'Edit Event' : 'New Event'}</div>
+    <div class="cal-pop-row">
+      <div class="cal-pop-label">Title</div>
+      <input class="input" id="cal-pop-title" value="${escH(titleVal)}" placeholder="Event name…" style="margin-top:3px" autofocus>
+    </div>
+    <div class="cal-pop-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div>
+        <div class="cal-pop-label">Start</div>
+        <input class="input" type="date" id="cal-pop-start" value="${startVal}" style="margin-top:3px">
+      </div>
+      <div>
+        <div class="cal-pop-label">End</div>
+        <input class="input" type="date" id="cal-pop-end" value="${endVal}" style="margin-top:3px">
+      </div>
+    </div>
+    <div class="cal-pop-row">
+      <div class="cal-pop-label">Type</div>
+      <div class="cal-type-btns">
+        ${CAL_TYPES.map(t => `<button class="cal-type-btn ${t}${t===typeVal?' active':''}" onclick="calSelectType('${t}')">${CAL_TYPE_LABELS[t]}</button>`).join('')}
+      </div>
+    </div>
+    <div class="cal-pop-acts">
+      ${isEdit ? `<button class="btn btn-danger btn-sm" onclick="deleteCalEvent('${evtId}')">Delete</button>` : ''}
+      <button class="btn btn-ghost btn-sm" onclick="closeCalPopover()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveCalEvent()">Save</button>
+    </div>
+  `;
+
+  document.body.appendChild(pop);
+
+  // Position popover near click, keeping within viewport
+  if (mouseEvent) {
+    const x = mouseEvent.clientX;
+    const y = mouseEvent.clientY;
+    const pw = 280, ph = 320;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    pop.style.left = Math.min(x + 8, vw - pw - 16) + 'px';
+    pop.style.top  = Math.min(y + 8, vh - ph - 16) + 'px';
+  } else {
+    // Center on screen
+    pop.style.left = '50%';
+    pop.style.top  = '50%';
+    pop.style.transform = 'translate(-50%,-50%)';
+  }
+
+  // Focus title input
+  setTimeout(() => {
+    const ti = document.getElementById('cal-pop-title');
+    if (ti) { ti.focus(); ti.select(); }
+  }, 50);
+
+  // Close on outside click
+  setTimeout(() => {
+    document.addEventListener('click', calOutsideClick);
+  }, 100);
+
+  // Save on Enter
+  const titleInp = document.getElementById('cal-pop-title');
+  if (titleInp) titleInp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveCalEvent();
+    if (e.key === 'Escape') closeCalPopover();
+  });
+}
+
+function calOutsideClick(e) {
+  const pop = document.getElementById('cal-popover');
+  if (pop && !pop.contains(e.target)) closeCalPopover();
+}
+
+function closeCalPopover() {
+  const pop = document.getElementById('cal-popover');
+  if (pop) pop.remove();
+  document.removeEventListener('click', calOutsideClick);
+  calPopoverEvtId = null;
+}
+
+function calSelectType(type) {
+  document.querySelectorAll('.cal-type-btn').forEach(b => {
+    b.classList.toggle('active', b.classList.contains(type));
+  });
+}
+
+function saveCalEvent() {
+  const title = (document.getElementById('cal-pop-title')?.value || '').trim();
+  const start = document.getElementById('cal-pop-start')?.value || '';
+  const end   = document.getElementById('cal-pop-end')?.value   || start;
+  const type  = document.querySelector('.cal-type-btn.active')?.classList[1] || 'study';
+
+  if (!title || !start) { closeCalPopover(); return; }
+
+  // Ensure end >= start
+  const endFinal = end < start ? start : end;
+
+  if (!Array.isArray(state.calendarItems)) state.calendarItems = [];
+
+  if (calPopoverEvtId) {
+    // Edit existing
+    const evt = state.calendarItems.find(c => c.id === calPopoverEvtId);
+    if (evt) { evt.title = title; evt.date = start; evt.end = endFinal; evt.type = type; }
+  } else {
+    // New event
+    state.calendarItems.push({ id: uid(), title, date: start, end: endFinal, type, locked: false });
+  }
+
+  closeCalPopover();
+  renderCalendar();
+  scheduleSave();
+}
+
+async function deleteCalEvent(evtId) {
+  const evt = (state.calendarItems || []).find(c => c.id === evtId);
+  if (!evt) return;
+  const ok = await confirm2(`Delete "${evt.title}"?`);
+  if (!ok) return;
+  state.calendarItems = state.calendarItems.filter(c => c.id !== evtId);
+  closeCalPopover();
+  renderCalendar();
+  scheduleSave();
 }
