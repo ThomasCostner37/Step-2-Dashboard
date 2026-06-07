@@ -626,7 +626,8 @@ function injectStyles() {
                    color:var(--text-primary); margin-bottom:.2rem; line-height:1.3; }
     .sp-artist-lg { font-family:var(--font-mono); font-size:.75rem; color:var(--text-tertiary); margin-bottom:.85rem; }
     .sp-progress-wrap { height:3px; background:var(--bg-elevated); border-radius:999px; margin-bottom:.5rem; overflow:hidden; }
-    .sp-progress-bar  { height:100%; background:#1DB954; border-radius:999px; transition:width .9s linear; }
+    /* NOTE: no CSS transition on progress bar — interpolator drives it smoothly at 1s intervals */
+    .sp-progress-bar  { height:100%; background:#1DB954; border-radius:999px; }
     .sp-time-row { display:flex; justify-content:space-between; font-family:var(--font-mono);
                    font-size:.58rem; color:var(--text-tertiary); margin-bottom:1rem; }
     .sp-controls { display:flex; align-items:center; justify-content:center; gap:16px; }
@@ -899,6 +900,10 @@ function showTab(tab) {
   const btn   = document.getElementById('btn-' + tab);
   if (panel) panel.classList.add('active');
   if (btn)   btn.classList.add('active');
+  // Refresh playlists when Focus tab is opened
+  if (tab === 'focus' && spToken) {
+    fetchSpotifyPlaylists();
+  }
 }
 
 function globalKeyDown(e) {
@@ -2152,10 +2157,6 @@ function safeId(str) { return String(str||'').toLowerCase().replace(/[^a-z0-9]+/
 function setText(id, value) { const el=document.getElementById(id); if(el) el.textContent=value; }
 
 // ── FOCUS ADVISOR ─────────────────────────────────────────
-// Floating button + modal with Plan / Train modes
-// Plan: AI builds a study schedule from your weak spots + calendar
-// Train: Free-text session log that the AI parses and stores
-
 function injectAdvisor() {
   // ── Floating button ──
   const fab = document.createElement('button');
@@ -2518,7 +2519,6 @@ async function runAdvisorPlan() {
   result.style.display = 'block';
   result.innerHTML = `<div class="adv-result-box"><div class="adv-result-thinking">Building your schedule…</div></div>`;
 
-  // Build context snapshot from current state
   const today       = new Date().toISOString().slice(0,10);
   const openTopics  = (state.topics || []).filter(t => !t.done);
   const examTimeline = (state.practiceExams || [])
@@ -2615,7 +2615,6 @@ function renderAdvisorPlanResult(plan) {
   const result = document.getElementById('adv-plan-result');
   if (!result || !plan || !plan.blocks) return;
 
-  // Build editable blocks
   const blocksHTML = plan.blocks.map((block, bi) => {
     const topicsText = block.topics.map(t =>
       `${t.name}${t.minutes ? ' (' + t.minutes + ' min)' : ''}${t.note ? ' — ' + t.note : ''}`
@@ -2651,9 +2650,7 @@ function adoptAdvisorPlan(blockCount) {
     if (!ta) continue;
     const lines = ta.value.split('\n').map(l => l.trim()).filter(Boolean);
     lines.forEach(line => {
-      // Skip buffer/review lines
       if (/^buffer|^review\s*\/|^buffer\s*\/\s*review/i.test(line)) return;
-      // Strip time estimates "(45 min)" and notes "— High priority..." 
       const clean = line.replace(/\s*\(.*$/, '').replace(/\s*—.*$/, '').trim();
       if (clean) state.todayFocus.items.push({ topic: clean, done: false });
     });
@@ -2663,7 +2660,6 @@ function adoptAdvisorPlan(blockCount) {
   scheduleSave();
   closeAdvisorModal();
 
-  // Brief confirmation flash
   const fab = document.getElementById('advisor-fab');
   if (fab) {
     fab.textContent = '✓ Added!';
@@ -2718,7 +2714,6 @@ If time is unclear, estimate conservatively. Topics should match USMLE subject a
     const clean = raw.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(clean);
 
-    // Show parsed result for confirmation
     result.innerHTML = `
       <div class="adv-result-box" style="border-color:var(--border-bright)">
         <div style="font-family:var(--font-mono);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text-tertiary);margin-bottom:.6rem">Parsed — confirm before saving</div>
@@ -2731,14 +2726,13 @@ If time is unclear, estimate conservatively. Topics should match USMLE subject a
         </div>
         <div class="adv-actions">
           <button class="btn btn-ghost btn-sm" onclick="document.getElementById('adv-train-result').style.display='none'">Discard</button>
-          <button class="btn btn-primary btn-sm" onclick="saveAdvisorSession(${JSON.stringify(parsed).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')})">Save to Log</button>
+          <button class="btn btn-primary btn-sm" id="adv-save-btn">Save to Log</button>
         </div>
       </div>
     `;
 
-    // Store parsed data in a temp attribute to avoid inline JSON issues
     window._pendingAdvisorSession = parsed;
-    result.querySelector('.btn-primary').onclick = () => saveAdvisorSession(window._pendingAdvisorSession);
+    document.getElementById('adv-save-btn').onclick = () => saveAdvisorSession(window._pendingAdvisorSession);
 
   } catch(err) {
     result.innerHTML = `<div class="adv-result-box" style="border-color:rgba(184,58,32,.3)">
@@ -2753,7 +2747,6 @@ If time is unclear, estimate conservatively. Topics should match USMLE subject a
 function saveAdvisorSession(parsed) {
   if (!state.advisorSessionLog) state.advisorSessionLog = [];
   state.advisorSessionLog.push(parsed);
-  // Keep last 100 sessions
   if (state.advisorSessionLog.length > 100)
     state.advisorSessionLog = state.advisorSessionLog.slice(-100);
 
@@ -2765,7 +2758,6 @@ function saveAdvisorSession(parsed) {
   scheduleSave();
   renderAdvisorSessionLog();
 
-  // Flash confirmation
   const btn = document.getElementById('adv-train-btn');
   if (btn) {
     btn.textContent = '✓ Saved!';
@@ -2800,22 +2792,19 @@ function renderAdvisorSessionLog() {
 // ============================================================
 
 let calYear  = new Date().getFullYear();
-let calMonth = new Date().getMonth(); // 0-indexed
-let calPopoverEvtId = null; // currently editing event id
+let calMonth = new Date().getMonth();
+let calPopoverEvtId = null;
 
 const CAL_TYPES = ['exam','study','personal','rotation'];
 const CAL_TYPE_LABELS = { exam:'Exam', study:'Study', personal:'Personal', rotation:'Rotation' };
 
-// Normalize calendarItems — ensure they have all needed fields
 function normalizeCalendarItems() {
   if (!Array.isArray(state.calendarItems)) state.calendarItems = [];
 
-  // Pull in practiceExams as locked exam events (sync, don't duplicate)
   (state.practiceExams || []).forEach(pe => {
     if (!pe.date) return;
     const existing = state.calendarItems.find(c => c.peId === pe.id);
     if (existing) {
-      // Update name/date in case it changed
       existing.title = pe.name;
       existing.date  = pe.date;
       existing.end   = pe.date;
@@ -2828,18 +2817,15 @@ function normalizeCalendarItems() {
     }
   });
 
-  // Remove stale peId events whose exam was deleted
   const peIds = (state.practiceExams || []).map(p => p.id);
   state.calendarItems = state.calendarItems.filter(c => !c.peId || peIds.includes(c.peId));
 
-  // Remove malformed items (no valid date, or legacy "hey" placeholder)
   state.calendarItems = state.calendarItems.filter(c => {
     if (!c.date || typeof c.date !== 'string' || c.date.length < 8) return false;
     if (c.title === 'hey') return false;
     return true;
   });
 
-  // Ensure all items have required fields
   state.calendarItems.forEach(c => {
     if (!c.id)   c.id   = uid();
     if (!c.type) c.type = 'study';
@@ -2873,11 +2859,9 @@ function renderCalendar() {
 
   normalizeCalendarItems();
 
-  // Update month label
   if (lbl) lbl.textContent = new Date(calYear, calMonth, 1)
     .toLocaleDateString([], { month:'long', year:'numeric' });
 
-  // Build day-of-week header
   const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   let html = `<div class="cal-dow-row">${dows.map(d => `<div class="cal-dow">${d}</div>`).join('')}</div>`;
   html += `<div class="cal-weeks" id="cal-weeks-inner"></div>`;
@@ -2885,13 +2869,11 @@ function renderCalendar() {
 
   const weeksEl = document.getElementById('cal-weeks-inner');
 
-  // Figure out calendar grid bounds
   const firstDay  = new Date(calYear, calMonth, 1);
   const lastDay   = new Date(calYear, calMonth + 1, 0);
-  const startDow  = firstDay.getDay(); // 0=Sun
+  const startDow  = firstDay.getDay();
   const today     = new Date().toISOString().slice(0,10);
 
-  // Build array of all days to show (pad with prev/next month days)
   const days = [];
   for (let i = 0; i < startDow; i++) {
     const d = new Date(calYear, calMonth, 1 - (startDow - i));
@@ -2907,11 +2889,9 @@ function renderCalendar() {
     days.push({ date: last.toISOString().slice(0,10), curMonth: false });
   }
 
-  // Group into weeks
   const weeks = [];
   for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i+7));
 
-  // Render each week
   weeks.forEach(week => {
     const weekEl = document.createElement('div');
     weekEl.className = 'cal-week';
@@ -2926,7 +2906,6 @@ function renderCalendar() {
       const dayNum = new Date(date + 'T00:00:00').getDate();
       let eventsHTML = '';
 
-      // Get events that span this date, sorted by start date then by multi-day length
       const dayEvts = getEventsForDate(date);
       const shown = dayEvts.slice(0, 3);
       const extra = dayEvts.length - shown.length;
@@ -2964,14 +2943,13 @@ function getEventsForDate(date) {
   }).sort((a,b) => a.date.localeCompare(b.date));
 }
 
-// ── Calendar Popover ──────────────────────────────────────
 function openCalPopover(mouseEvent, evtId, defaultDate) {
   closeCalPopover();
 
   const isEdit = !!evtId;
   const evt    = isEdit ? (state.calendarItems || []).find(c => c.id === evtId) : null;
   if (isEdit && !evt) return;
-  if (isEdit && evt.locked) return; // locked exam events not editable
+  if (isEdit && evt.locked) return;
 
   calPopoverEvtId = evtId || null;
 
@@ -3015,7 +2993,6 @@ function openCalPopover(mouseEvent, evtId, defaultDate) {
 
   document.body.appendChild(pop);
 
-  // Position popover near click, keeping within viewport
   if (mouseEvent) {
     const x = mouseEvent.clientX;
     const y = mouseEvent.clientY;
@@ -3024,24 +3001,20 @@ function openCalPopover(mouseEvent, evtId, defaultDate) {
     pop.style.left = Math.min(x + 8, vw - pw - 16) + 'px';
     pop.style.top  = Math.min(y + 8, vh - ph - 16) + 'px';
   } else {
-    // Center on screen
     pop.style.left = '50%';
     pop.style.top  = '50%';
     pop.style.transform = 'translate(-50%,-50%)';
   }
 
-  // Focus title input
   setTimeout(() => {
     const ti = document.getElementById('cal-pop-title');
     if (ti) { ti.focus(); ti.select(); }
   }, 50);
 
-  // Close on outside click
   setTimeout(() => {
     document.addEventListener('click', calOutsideClick);
   }, 100);
 
-  // Save on Enter
   const titleInp = document.getElementById('cal-pop-title');
   if (titleInp) titleInp.addEventListener('keydown', e => {
     if (e.key === 'Enter') saveCalEvent();
@@ -3075,17 +3048,14 @@ function saveCalEvent() {
 
   if (!title || !start) { closeCalPopover(); return; }
 
-  // Ensure end >= start
   const endFinal = end < start ? start : end;
 
   if (!Array.isArray(state.calendarItems)) state.calendarItems = [];
 
   if (calPopoverEvtId) {
-    // Edit existing
     const evt = state.calendarItems.find(c => c.id === calPopoverEvtId);
     if (evt) { evt.title = title; evt.date = start; evt.end = endFinal; evt.type = type; }
   } else {
-    // New event
     state.calendarItems.push({ id: uid(), title, date: start, end: endFinal, type, locked: false });
   }
 
@@ -3133,10 +3103,8 @@ let spLastProgress     = 0;
 let spLastDuration     = 0;
 let spIsPlaying        = false;
 
-// ── Tab injection ─────────────────────────────────────────
 // ── Expanded quotes ──────────────────────────────────────
 const ALL_QUOTES = [
-  // Grind / determination
   { text:"The difference between the impossible and the possible lies in a person's determination.", attr:"Tommy Lasorda" },
   { text:"You have to fight to reach your dream. You have to sacrifice and work hard for it.", attr:"Lionel Messi" },
   { text:"Hard work beats talent when talent doesn't work hard.", attr:"Tim Notke" },
@@ -3152,7 +3120,6 @@ const ALL_QUOTES = [
   { text:"The best never rest.", attr:"Anonymous" },
   { text:"Success is the sum of small efforts repeated day in and day out.", attr:"Robert Collier" },
   { text:"Excellence is not a destination but a continuous journey that never ends.", attr:"Anonymous" },
-  // Medical school specific
   { text:"Every patient you'll ever treat is counting on the version of you that didn't quit.", attr:"Anonymous" },
   { text:"You chose medicine because you wanted to matter. Remember that on the hard days.", attr:"Anonymous" },
   { text:"The exam is just a gate. What you become getting through it is what actually counts.", attr:"Anonymous" },
@@ -3160,7 +3127,6 @@ const ALL_QUOTES = [
   { text:"Your future patients don't know your name yet, but they're already counting on you.", attr:"Anonymous" },
   { text:"The road is long, but so is the reward.", attr:"Anonymous" },
   { text:"One more question. One more page. One more day closer.", attr:"Anonymous" },
-  // Stoic / philosophical
   { text:"You have power over your mind, not outside events. Realize this, and you will find strength.", attr:"Marcus Aurelius" },
   { text:"Waste no more time arguing what a good man should be. Be one.", attr:"Marcus Aurelius" },
   { text:"It is not the mountain we conquer, but ourselves.", attr:"Edmund Hillary" },
@@ -3169,7 +3135,6 @@ const ALL_QUOTES = [
   { text:"Difficulties strengthen the mind as labor does the body.", attr:"Seneca" },
   { text:"We suffer more in imagination than in reality.", attr:"Seneca" },
   { text:"It does not matter how slowly you go as long as you do not stop.", attr:"Confucius" },
-  // Competition / identity
   { text:"I hated every minute of training, but I said: don't quit. Suffer now and live the rest of your life as a champion.", attr:"Muhammad Ali" },
   { text:"If you're not tired, you're not working hard enough.", attr:"Anonymous" },
   { text:"The only person you are destined to become is the person you decide to be.", attr:"Ralph Waldo Emerson" },
@@ -3184,7 +3149,7 @@ const ALL_QUOTES = [
 
 let focusQuoteIdx = Math.floor(Math.random() * ALL_QUOTES.length);
 let focusQuoteTimer = null;
-let focusRightMode = 'playlists'; // 'playlists' | 'focus'
+let focusRightMode = 'playlists';
 
 function injectSpotifyTab() {
   const tabBar = document.querySelector('.tab-bar');
@@ -3252,13 +3217,13 @@ function injectSpotifyTab() {
             </div>
           </div>
 
-          <!-- Quotes panel -->
-          <div id="focus-quotes-panel" style="display:none;flex:1">
-            <div style="min-height:180px;display:flex;flex-direction:column;justify-content:center;padding:.5rem 0">
+          <!-- Quotes panel — FIXED: vertical centering + centered nav + bigger author -->
+          <div id="focus-quotes-panel" style="display:none;flex-direction:column;justify-content:space-between;min-height:200px">
+            <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:.5rem 0 1rem">
               <div id="focus-quote-text" style="font-family:var(--font-display);font-style:italic;font-size:1.45rem;color:var(--text-secondary);line-height:1.75;transition:opacity .5s ease;margin-bottom:1rem;text-align:center"></div>
-              <div id="focus-quote-attr" style="font-family:var(--font-mono);font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);transition:opacity .5s ease;text-align:center"></div>
+              <div id="focus-quote-attr" style="font-family:var(--font-mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);transition:opacity .5s ease;text-align:center"></div>
             </div>
-            <div style="display:flex;gap:8px;margin-top:.5rem">
+            <div style="display:flex;gap:8px;justify-content:center;padding-top:.5rem">
               <button class="btn btn-ghost btn-sm" onclick="prevFocusQuote()">‹ Prev</button>
               <button class="btn btn-ghost btn-sm" onclick="nextFocusQuote()">Next ›</button>
             </div>
@@ -3270,7 +3235,6 @@ function injectSpotifyTab() {
     app.appendChild(panel);
   }
 
-  // Hidden pom inputs for header widget
   if (!document.getElementById('pom-work-inp')) {
     const hidden = document.createElement('div');
     hidden.style.display = 'none';
@@ -3287,8 +3251,10 @@ function setFocusRight(mode) {
   focusRightMode = mode;
   document.getElementById('focus-btn-playlists')?.classList.toggle('active', mode === 'playlists');
   document.getElementById('focus-btn-quotes')?.classList.toggle('active', mode === 'quotes');
-  document.getElementById('focus-playlists-panel').style.display = mode === 'playlists' ? 'block' : 'none';
-  document.getElementById('focus-quotes-panel').style.display    = mode === 'quotes'    ? 'block' : 'none';
+  const playlistsPanel = document.getElementById('focus-playlists-panel');
+  const quotesPanel    = document.getElementById('focus-quotes-panel');
+  if (playlistsPanel) playlistsPanel.style.display = mode === 'playlists' ? 'block' : 'none';
+  if (quotesPanel)    quotesPanel.style.display    = mode === 'quotes'    ? 'flex'  : 'none';
   document.getElementById('focus-right-title').textContent = mode === 'playlists' ? 'Playlists' : 'Quotes';
   if (mode === 'quotes') startFocusQuotes();
   else stopFocusQuotes();
@@ -3302,8 +3268,8 @@ function showFocusQuote(idx) {
   qt.style.opacity = '0'; qa.style.opacity = '0';
   setTimeout(() => {
     const q = ALL_QUOTES[idx];
-    qt.textContent = '“' + q.text + '”';
-    qa.textContent = q.attr ? '— ' + q.attr : '';
+    qt.textContent = '\u201C' + q.text + '\u201D';
+    qa.textContent = q.attr ? '\u2014 ' + q.attr.toUpperCase() : '';
     qt.style.opacity = '1'; qa.style.opacity = '1';
   }, 500);
 }
@@ -3341,9 +3307,17 @@ async function fetchSpotifyPlaylists() {
   const container = document.getElementById('sp-playlists-list');
   if (!container) return;
   try {
-    const resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=20', {
+    // Attempt fetch; retry once with refreshed token on 401
+    let resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=20', {
       headers: { 'Authorization': `Bearer ${spToken}` }
     });
+    if (resp.status === 401) {
+      const ok = await refreshSpotifyToken();
+      if (!ok) return;
+      resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=20', {
+        headers: { 'Authorization': `Bearer ${spToken}` }
+      });
+    }
     if (!resp.ok) return;
     const data = await resp.json();
     if (!data.items?.length) {
@@ -3384,7 +3358,6 @@ async function playSpotifyPlaylist(uri, name) {
     });
     setTimeout(fetchNowPlaying, 800);
   } catch(e) {
-    // Fallback: open in Spotify app
     window.open(`https://open.spotify.com/playlist/${uri.split(':')[2]}`, '_blank');
   }
 }
@@ -3439,7 +3412,6 @@ async function exchangeSpotifyCode(code) {
     sessionStorage.setItem('sp_token', spToken);
     if (data.refresh_token) sessionStorage.setItem('sp_refresh', data.refresh_token);
     sessionStorage.removeItem('sp_verifier');
-    // Clean URL
     window.history.replaceState({}, '', window.location.pathname);
     initSpotifyPlayer();
     startSpotifyPoll();
@@ -3470,7 +3442,6 @@ async function refreshSpotifyToken() {
 
 // ── Init ──────────────────────────────────────────────────
 function initSpotify() {
-  // Check if returning from Spotify auth
   const params = new URLSearchParams(window.location.search);
   const code   = params.get('code');
   if (code) {
@@ -3478,16 +3449,14 @@ function initSpotify() {
     return;
   }
 
-  // Check for existing token
   const saved = sessionStorage.getItem('sp_token');
   if (saved) {
     spToken = saved;
     initSpotifyPlayer();
     startSpotifyPoll();
-    setTimeout(fetchSpotifyPlaylists, 1000);
+    // Playlists will also be fetched by startSpotifyPoll
   }
 
-  // Inject Web Playback SDK
   if (!window.Spotify && !document.getElementById('sp-sdk')) {
     const script    = document.createElement('script');
     script.id       = 'sp-sdk';
@@ -3535,21 +3504,27 @@ function startSpotifyPoll() {
   fetchNowPlaying();
   fetchSpotifyPlaylists();
   spPollTimer = setInterval(fetchNowPlaying, 10000);
-  // Interpolate progress bar every second between polls
+  // Interpolate progress every second between polls — drives the bar smoothly
   spInterpolateTimer = setInterval(() => {
     if (!spIsPlaying || !spLastDuration) return;
     const elapsed = Date.now() - spLastPollTime;
     const interpolated = Math.min(spLastProgress + elapsed, spLastDuration);
-    const pct = Math.round((interpolated / spLastDuration) * 100);
+    const pct = (interpolated / spLastDuration) * 100;
+    // Update bar directly — no transition in CSS, so this is already smooth at 1s
     const bar = document.querySelector('.sp-progress-bar');
-    if (bar) bar.style.width = pct + '%';
-    // Update time display
+    if (bar) bar.style.width = pct.toFixed(2) + '%';
+    // Update elapsed time display
     const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
-    const timeEls = document.querySelectorAll('.sp-time-row span:first-child');
-    timeEls.forEach(el => el.textContent = fmt(interpolated));
+    // Target only the first sp-time-row span (elapsed), not duration
+    const timeRows = document.querySelectorAll('.sp-time-row');
+    timeRows.forEach(row => {
+      const span = row.querySelector('span:first-child');
+      if (span) span.textContent = fmt(interpolated);
+    });
   }, 1000);
 }
 
+// ── FIXED: fetchNowPlaying only re-renders DOM when track changes ──────────
 async function fetchNowPlaying() {
   if (!spToken) return;
   try {
@@ -3563,26 +3538,60 @@ async function fetchNowPlaying() {
       return;
     }
     const data = await resp.json();
+    const prevUri = spCurrentTrack?.item?.uri;
     spCurrentTrack = data;
+
     if (data && data.item) {
+      const newUri = data.item.uri;
+      // Sync internal state variables used by the interpolator
       spLastProgress = data.progress_ms || 0;
       spLastDuration = data.item.duration_ms || 0;
       spLastPollTime = Date.now();
       spIsPlaying    = data.is_playing;
+
+      // Only rebuild the DOM when the track actually changes or on first load.
+      // When the same track is playing, the interpolator smoothly handles progress
+      // and we just do a lightweight play/pause button sync to avoid any jump.
+      if (newUri !== prevUri || prevUri === undefined) {
+        renderNowPlaying(data);
+      } else {
+        updatePlayPauseButtons(spIsPlaying);
+      }
     } else {
       spIsPlaying = false;
+      renderNowPlaying(data);
     }
-    renderNowPlaying(data);
   } catch(e) { console.warn('Spotify poll:', e); }
+}
+
+// Lightweight: only update play/pause button icon + green dot — no DOM rebuild
+function updatePlayPauseButtons(isPlaying) {
+  const icon = isPlaying ? '⏸' : '▶';
+  const title = isPlaying ? 'Pause' : 'Play';
+  const focusPlay = document.querySelector('.sp-ctrl-btn.play');
+  if (focusPlay) { focusPlay.textContent = icon; focusPlay.title = title; }
+  const hdrPlay = document.querySelector('.hdr-sp-btn.play');
+  if (hdrPlay) { hdrPlay.textContent = icon; hdrPlay.title = title; }
+  const dot = document.querySelector('.hdr-sp-dot');
+  if (dot) dot.style.opacity = isPlaying ? '1' : '0';
 }
 
 function updateNowPlayingFromSDK(sdkState) {
   if (!sdkState || !sdkState.track_window) return;
   const track = sdkState.track_window.current_track;
+  const prevUri = spCurrentTrack?.item?.uri;
+  const newUri  = track.uri;
   spLastProgress = sdkState.position || 0;
   spLastDuration = sdkState.duration || 0;
   spLastPollTime = Date.now();
   spIsPlaying    = !sdkState.paused;
+
+  // Same track: just sync buttons; interpolator handles bar
+  if (newUri === prevUri && prevUri !== undefined) {
+    updatePlayPauseButtons(spIsPlaying);
+    return;
+  }
+
   renderNowPlayingDirect({
     isPlaying:  !sdkState.paused,
     trackName:  track.name,
@@ -3632,7 +3641,7 @@ function renderFocusTabNowPlaying(info) {
     return;
   }
 
-  const pct = info.duration ? Math.round((info.progress / info.duration) * 100) : 0;
+  const pct = info.duration ? (info.progress / info.duration) * 100 : 0;
   const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
 
   container.innerHTML = `
@@ -3641,7 +3650,7 @@ function renderFocusTabNowPlaying(info) {
     <div class="sp-track-lg">${escH(info.trackName)}</div>
     <div class="sp-artist-lg">${escH(info.artistName)}</div>
     <div class="sp-progress-wrap">
-      <div class="sp-progress-bar" style="width:${pct}%"></div>
+      <div class="sp-progress-bar" style="width:${pct.toFixed(2)}%"></div>
     </div>
     <div class="sp-time-row">
       <span>${fmt(info.progress)}</span>
@@ -3690,7 +3699,6 @@ function ensureHeaderWidgets(info) {
   const headerRight = document.querySelector('.header-right');
   if (!headerRight) return;
 
-  // Spotify section
   if (!document.getElementById('sp-header-section')) {
     const spDiv = document.createElement('div');
     spDiv.id = 'sp-header-section';
@@ -3699,7 +3707,6 @@ function ensureHeaderWidgets(info) {
     headerRight.insertBefore(spDiv, saveStatus);
   }
 
-  // Pomodoro section
   if (!document.getElementById('pom-header-section')) {
     const pomDiv = document.createElement('div');
     pomDiv.id = 'pom-header-section';
@@ -3719,7 +3726,6 @@ function ensureHeaderWidgets(info) {
     headerRight.insertBefore(pomDiv, saveStatus);
   }
 
-  // Edit popover for pomodoro
   if (!document.getElementById('pom-edit-pop')) {
     const pop = document.createElement('div');
     pop.id = 'pom-edit-pop';
@@ -3740,7 +3746,6 @@ function ensureHeaderWidgets(info) {
       </div>
     `;
     document.body.appendChild(pop);
-    // Close on outside click
     document.addEventListener('click', e => {
       const pop = document.getElementById('pom-edit-pop');
       const btn = document.getElementById('pom-header-section');
@@ -3778,7 +3783,6 @@ async function spPlayPause() {
     spPlayer.togglePlay();
     return;
   }
-  // Fallback to API
   const state = await fetch('https://api.spotify.com/v1/me/player', {
     headers: { 'Authorization': `Bearer ${spToken}` }
   }).then(r => r.json()).catch(() => null);
@@ -3799,6 +3803,8 @@ async function spNext() {
   await fetch('https://api.spotify.com/v1/me/player/next', {
     method: 'POST', headers: { 'Authorization': `Bearer ${spToken}` }
   });
+  // Force full re-render after skip so new track shows immediately
+  spCurrentTrack = null;
   setTimeout(fetchNowPlaying, 500);
 }
 
@@ -3808,13 +3814,14 @@ async function spPrev() {
   await fetch('https://api.spotify.com/v1/me/player/previous', {
     method: 'POST', headers: { 'Authorization': `Bearer ${spToken}` }
   });
+  spCurrentTrack = null;
   setTimeout(fetchNowPlaying, 500);
 }
 
 // ── Pomodoro ──────────────────────────────────────────────
 let pomInterval  = null;
 let pomRunning   = false;
-let pomPhase     = 'work'; // 'work' | 'break'
+let pomPhase     = 'work';
 let pomSecondsLeft = 45 * 60;
 
 function pomGetWork()  { return parseInt(document.getElementById('pom-work-inp')?.value  || 45) * 60; }
@@ -3824,15 +3831,16 @@ function pomToggle() {
   if (pomRunning) {
     clearInterval(pomInterval);
     pomRunning = false;
-    document.getElementById('pom-start-btn').textContent = 'Resume';
+    const startBtn = document.getElementById('pom-start-btn');
+    if (startBtn) startBtn.textContent = 'Resume';
   } else {
-    // Initialize if at full time
     if (pomSecondsLeft === 45 * 60 || pomSecondsLeft <= 0) {
       pomSecondsLeft = pomGetWork();
       pomPhase = 'work';
     }
     pomRunning = true;
-    document.getElementById('pom-start-btn').textContent = 'Pause';
+    const startBtn = document.getElementById('pom-start-btn');
+    if (startBtn) startBtn.textContent = 'Pause';
     pomInterval = setInterval(pomTick, 1000);
   }
   pomRender();
@@ -3850,22 +3858,21 @@ function pomTick() {
 function pomPhaseEnd() {
   clearInterval(pomInterval);
   pomRunning = false;
-  // Chime
   try {
     const ctx = new AudioContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination);
-    osc.frequency.value = pomPhase === 'work' ? 523 : 440; // C5 for work end, A4 for break end
+    osc.frequency.value = pomPhase === 'work' ? 523 : 440;
     gain.gain.setValueAtTime(0.3, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
     osc.start(); osc.stop(ctx.currentTime + 1.2);
   } catch(e) {}
 
-  // Switch phase
   pomPhase = pomPhase === 'work' ? 'break' : 'work';
   pomSecondsLeft = pomPhase === 'work' ? pomGetWork() : pomGetBreak();
-  document.getElementById('pom-start-btn').textContent = pomPhase === 'work' ? 'Start Work' : 'Start Break';
+  const startBtn = document.getElementById('pom-start-btn');
+  if (startBtn) startBtn.textContent = pomPhase === 'work' ? 'Start Work' : 'Start Break';
   pomRender();
 }
 
@@ -3883,7 +3890,6 @@ function pomRender() {
   const timeStr = `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
   const phaseStr = pomPhase === 'work' ? 'Work' : 'Break';
 
-  // Update header pomodoro display
   const hdrTime  = document.getElementById('hdr-pom-time');
   const hdrPhase = document.getElementById('hdr-pom-phase');
   const hdrStart = document.getElementById('hdr-pom-start');
@@ -3891,7 +3897,6 @@ function pomRender() {
   if (hdrPhase) { hdrPhase.textContent = phaseStr; hdrPhase.className = 'hdr-pom-phase' + (pomPhase === 'break' ? ' break' : ''); }
   if (hdrStart) hdrStart.textContent = pomRunning ? '⏸' : '▶';
 
-  // Update focus tab pomodoro display
   const fTime  = document.getElementById('focus-pom-time');
   const fPhase = document.getElementById('focus-pom-phase');
   const fStart = document.getElementById('focus-pom-start-btn');
@@ -3901,13 +3906,12 @@ function pomRender() {
   if (fPhase) { fPhase.textContent = phaseStr; fPhase.className = phaseCls; }
   if (fStart) fStart.textContent = btnLabel;
 
-  // Update tab title while running
   if (pomRunning) document.title = `${timeStr} · Step 2`;
   else document.title = 'Step 2 — Study Dashboard';
 }
 
-// Init pom — called after header widgets are injected
 function initPomDisplay() {
   pomSecondsLeft = pomGetWork();
   pomRender();
 }
+
