@@ -118,7 +118,7 @@ function injectSpotifyTab() {
             <div class="pom-controls" style="margin-bottom:0">
               <button class="pom-btn" onclick="pomReset()">Reset</button>
               <button class="pom-btn primary" id="focus-pom-start-btn" onclick="pomToggle()">Start</button>
-              <button class="pom-btn" onclick="pomOpenEdit(event)">Edit</button>
+              <button class="pom-btn" id="focus-pom-edit-btn" onclick="pomOpenEdit(event)">Edit</button>
             </div>
           </div>
 
@@ -134,19 +134,19 @@ function injectSpotifyTab() {
           </div>
 
           <!-- Playlists panel -->
-          <div id="focus-playlists-panel" style="flex:1;overflow-y:auto;max-height:320px">
+          <div id="focus-playlists-panel" style="flex:1;overflow-y:auto;min-height:0">
             <div id="sp-playlists-list">
               <div class="sp-idle" style="padding:1rem 0">Connect Spotify to see your playlists</div>
             </div>
           </div>
 
-          <!-- Quotes panel — FIXED: vertical centering + centered nav + bigger author -->
-          <div id="focus-quotes-panel" style="display:none;flex-direction:column;justify-content:space-between;min-height:200px">
-            <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:.5rem 0 1rem">
+          <!-- Quotes panel -->
+          <div id="focus-quotes-panel" style="display:none;flex-direction:column;flex:1;min-height:0">
+            <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:1rem 0">
               <div id="focus-quote-text" style="font-family:var(--font-display);font-style:italic;font-size:1.45rem;color:var(--text-secondary);line-height:1.75;transition:opacity .5s ease;margin-bottom:1rem;text-align:center"></div>
               <div id="focus-quote-attr" style="font-family:var(--font-mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);transition:opacity .5s ease;text-align:center"></div>
             </div>
-            <div style="display:flex;gap:8px;justify-content:center;padding-top:.5rem">
+            <div class="quote-nav-btns" style="display:flex;gap:8px;justify-content:center;padding-bottom:.5rem;opacity:0;transition:opacity .2s">
               <button class="btn btn-ghost btn-sm" onclick="prevFocusQuote()">‹ Prev</button>
               <button class="btn btn-ghost btn-sm" onclick="nextFocusQuote()">Next ›</button>
             </div>
@@ -158,15 +158,9 @@ function injectSpotifyTab() {
     app.appendChild(panel);
   }
 
-  if (!document.getElementById('pom-work-inp')) {
-    const hidden = document.createElement('div');
-    hidden.style.display = 'none';
-    hidden.innerHTML = `
-      <input type="number" id="pom-work-inp"  value="45" min="1" max="180">
-      <input type="number" id="pom-break-inp" value="15" min="1" max="60">
-    `;
-    document.body.appendChild(hidden);
-  }
+  // Ensure pomodoro header + edit popover are always initialized
+  // (even before Spotify connects, so the Edit button on the Focus tab works)
+  ensureHeaderWidgets();
 }
 
 // ── Focus right panel toggle ──────────────────────────────
@@ -784,5 +778,3 @@ async function spPrev() {
   spCurrentTrack = null;
   setTimeout(fetchNowPlaying, 500);
 }
-
-

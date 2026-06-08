@@ -519,7 +519,7 @@ function injectStyles() {
                text-align:center; padding:2rem 1rem; }
 
     /* Pomodoro + moods card */
-    .pom-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.25rem; }
+    .pom-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.25rem; display:flex; flex-direction:column; }
     .pom-display { text-align:center; margin:.75rem 0 1rem; }
     .pom-time { font-family:var(--font-display); font-size:3.5rem; font-weight:800;
                 color:var(--accent); line-height:1; letter-spacing:-.03em; }
@@ -537,6 +537,9 @@ function injectStyles() {
     .pom-btn.primary { background:var(--accent-glow); border-color:rgba(176,120,48,.3); color:var(--accent-text); }
     .pom-btn.primary:hover { background:rgba(176,120,48,.18); border-color:var(--accent); }
     .pom-btn.danger { background:rgba(184,58,32,.08); border-color:rgba(184,58,32,.2); color:#B83A20; }
+
+    /* Quote nav ghost buttons */
+    #focus-quotes-panel:hover .quote-nav-btns { opacity:1 !important; }
 
     .mood-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
     .mood-btn { font-family:var(--font-mono); font-size:.65rem; padding:.5rem .3rem;
@@ -2021,4 +2024,3 @@ function confirm2(msg) {
     };
   });
 }
-
