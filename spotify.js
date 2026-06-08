@@ -288,8 +288,7 @@ async function fetchSpotifyPlaylists() {
       const img = pl.images?.[0]?.url || '';
       const div = document.createElement('div');
 
-      div.style.cssText =
-        'display:flex;align-items:center;gap:10px;padding:.45rem .5rem;border-radius:var(--r-sm);cursor:pointer;transition:background .12s;border:1px solid transparent';
+      div.className = 'sp-playlist-row';
 
       div.onmouseenter = () => {
         div.style.background = 'var(--bg-elevated)';
@@ -302,20 +301,16 @@ async function fetchSpotifyPlaylists() {
       };
 
       div.innerHTML = `
-        ${
-          img
-            ? `<img src="${escH(img)}" style="width:38px;height:38px;border-radius:4px;object-fit:cover;flex-shrink:0">`
-            : '<div style="width:38px;height:38px;border-radius:4px;background:var(--bg-elevated);flex-shrink:0"></div>'
-        }
-        <div style="min-width:0">
-          <div style="font-family:var(--font-mono);font-size:.75rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-            ${escH(pl.name)}
-          </div>
-          <div style="font-family:var(--font-mono);font-size:.6rem;color:var(--text-tertiary)">
-            ${pl.tracks?.total || 0} tracks
-          </div>
-        </div>
-        <div style="margin-left:auto;font-size:.9rem;color:var(--text-tertiary)">▶</div>
+      ${
+      img
+      ? `<img src="${escH(img)}" style="width:38px;height:38px;border-radius:4px;object-fit:cover;flex-shrink:0">`
+      : '<div style="width:38px;height:38px;border-radius:4px;background:var(--bg-elevated);flex-shrink:0"></div>'
+      }
+      <div class="sp-playlist-meta">
+      <div class="sp-playlist-name">${escH(pl.name)}</div>
+      <div class="sp-playlist-count">${pl.tracks?.total || 0} tracks</div>
+     </div>
+      <div class="sp-playlist-play">▶</div>
       `;
 
       div.onclick = () => playSpotifyPlaylist(pl.uri, pl.name);
