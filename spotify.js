@@ -118,7 +118,7 @@ function injectSpotifyTab() {
             <div class="pom-controls" style="margin-bottom:0">
               <button class="pom-btn" onclick="pomReset()">Reset</button>
               <button class="pom-btn primary" id="focus-pom-start-btn" onclick="pomToggle()">Start</button>
-              <button class="pom-btn" id="focus-pom-edit-btn" onclick="pomOpenEdit(event)">Edit</button>
+              <button class="pom-btn" id="focus-pom-edit-btn" onclick="pomOpenEdit(this)">Edit</button>
             </div>
           </div>
 
@@ -700,41 +700,14 @@ function ensureHeaderWidgets(info) {
       <div class="hdr-pom-btns">
         <button class="hdr-pom-btn" id="hdr-pom-start" onclick="pomToggle()" title="Start/Pause">▶</button>
         <button class="hdr-pom-btn" onclick="pomReset()" title="Reset">↺</button>
-        <button class="hdr-pom-btn" onclick="pomOpenEdit(event)" title="Edit">✎</button>
+        <button class="hdr-pom-btn" onclick="pomOpenEdit(this)" title="Edit">✎</button>
       </div>
     `;
     const saveStatus = document.getElementById('save-status');
     headerRight.insertBefore(pomDiv, saveStatus);
   }
 
-  if (!document.getElementById('pom-edit-pop')) {
-    const pop = document.createElement('div');
-    pop.id = 'pom-edit-pop';
-    pop.className = 'pom-edit-pop';
-    pop.style.display = 'none';
-    pop.innerHTML = `
-      <div style="display:flex;gap:10px;align-items:flex-end">
-        <div>
-          <div class="pom-set-label">Work (min)</div>
-          <input class="input" type="number" id="pom-work-inp" value="45" min="1" max="180" style="width:70px;text-align:center">
-        </div>
-        <div>
-          <div class="pom-set-label">Break (min)</div>
-          <input class="input" type="number" id="pom-break-inp" value="15" min="1" max="60" style="width:70px;text-align:center">
-        </div>
-        <button class="btn btn-primary btn-sm" onclick="pomSaveEdit()">Set</button>
-        <button class="btn btn-ghost btn-sm" onclick="pomCloseEdit()">✕</button>
-      </div>
-    `;
-    document.body.appendChild(pop);
-    document.addEventListener('click', e => {
-      const pop = document.getElementById('pom-edit-pop');
-      const btn = document.getElementById('pom-header-section');
-      if (pop && pop.style.display !== 'none' && !pop.contains(e.target) && !btn?.contains(e.target)) {
-        pomCloseEdit();
-      }
-    });
-  }
+  // pom-edit-pop is created on demand inside pomOpenEdit()
 }
 
 // ── Playback controls ─────────────────────────────────────
