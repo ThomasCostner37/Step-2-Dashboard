@@ -436,7 +436,7 @@ function injectStyles() {
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:18px;
-  align-items:stretch;
+  align-items:start;
 }
 
 .focus-tab-grid > * {
@@ -777,9 +777,12 @@ function showTab(tab) {
   const btn   = document.getElementById('btn-' + tab);
   if (panel) panel.classList.add('active');
   if (btn)   btn.classList.add('active');
-  // Refresh playlists when Focus tab is opened
-  if (tab === 'focus' && spToken) {
-    fetchSpotifyPlaylists();
+  // Refresh playlists + pin right-card height when Focus tab is opened
+  if (tab === 'focus') {
+    if (spToken) fetchSpotifyPlaylists();
+    if (typeof syncFocusCardHeights === 'function') {
+      requestAnimationFrame(syncFocusCardHeights);
+    }
   }
 }
 

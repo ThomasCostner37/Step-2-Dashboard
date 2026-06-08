@@ -161,6 +161,33 @@ function injectSpotifyTab() {
   // Ensure pomodoro header + edit popover are always initialized
   // (even before Spotify connects, so the Edit button on the Focus tab works)
   ensureHeaderWidgets();
+
+  // Pin the right card's height to the left card so playlists scroll inside it
+  observeFocusCardHeight();
+}
+
+// ── Match right (pom) card height to left (now-playing) card ──
+var _focusCardRO = null;
+function syncFocusCardHeights() {
+  var sp  = document.querySelector('#tab-focus .sp-card');
+  var pom = document.querySelector('#tab-focus .pom-card');
+  if (!sp || !pom) return;
+  // Stacked single-column layout (mobile): let it flow naturally
+  if (window.innerWidth <= 700) { pom.style.height = ''; return; }
+  pom.style.height = sp.offsetHeight + 'px';
+}
+
+function observeFocusCardHeight() {
+  var sp = document.querySelector('#tab-focus .sp-card');
+  if (!sp) return;
+  if (_focusCardRO) _focusCardRO.disconnect();
+  if (typeof ResizeObserver !== 'undefined') {
+    _focusCardRO = new ResizeObserver(function () { syncFocusCardHeights(); });
+    _focusCardRO.observe(sp);
+  }
+  window.addEventListener('resize', syncFocusCardHeights);
+  // Initial sync (after layout settles)
+  requestAnimationFrame(syncFocusCardHeights);
 }
 
 // ── Focus right panel toggle ──────────────────────────────
