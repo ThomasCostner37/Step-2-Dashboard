@@ -13,6 +13,9 @@ const SPOTIFY_SCOPES      = [
   'user-read-private',
   'playlist-read-private',
   'playlist-read-collaborative',
+  'playlist-modify-public',
+  'playlist-modify-private',
+  'user-library-modify',
 ].join(' ');
 
 let spToken        = null;
@@ -25,6 +28,9 @@ let spLastPollTime     = null;
 let spLastProgress     = 0;
 let spLastDuration     = 0;
 let spIsPlaying        = false;
+let spShuffleState     = false;
+let spRepeatState      = 'off';   // 'off' | 'context' | 'track'
+let spCurrentTrackUri  = null;
 
 // ── Expanded quotes ──────────────────────────────────────
 const ALL_QUOTES = [
@@ -334,6 +340,7 @@ async function fetchSpotifyPlaylists() {
       <div class="sp-playlist-play">▶</div>
       `;
 
+      div.dataset.uri = pl.uri;
       div.onclick = () => playSpotifyPlaylist(pl.uri, pl.name);
       container.appendChild(div);
     });
@@ -536,38 +543,44 @@ function startSpotifyPoll() {
 async function fetchNowPlaying() {
   if (!spToken) return;
   try {
-    const resp = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+    // Use /me/player to get shuffle + repeat state alongside current track
+    const resp = await fetch('https://api.spotify.com/v1/me/player', {
       headers: { 'Authorization': `Bearer ${spToken}` }
     });
-    if (resp.status === 204) { renderNowPlaying(null); return; }
+    if (resp.status === 204 || resp.status === 200 && resp.headers.get('content-length') === '0') {
+      renderNowPlaying(null); return;
+    }
     if (resp.status === 401) {
       const ok = await refreshSpotifyToken();
       if (ok) fetchNowPlaying();
       return;
     }
+    if (!resp.ok) { renderNowPlaying(null); return; }
+
     const data = await resp.json();
-    const prevUri = spCurrentTrack?.item?.uri;
+    if (!data || !data.item) { renderNowPlaying(null); return; }
+
+    // Sync shuffle + repeat state
+    const prevShuffle = spShuffleState;
+    const prevRepeat  = spRepeatState;
+    spShuffleState = data.shuffle_state || false;
+    spRepeatState  = data.repeat_state  || 'off';
+    if (spShuffleState !== prevShuffle || spRepeatState !== prevRepeat) {
+      updateShuffleRepeatButtons();
+    }
+
+    const prevUri = spCurrentTrackUri;
     spCurrentTrack = data;
+    spCurrentTrackUri = data.item.uri;
+    spLastProgress = data.progress_ms || 0;
+    spLastDuration = data.item.duration_ms || 0;
+    spLastPollTime = Date.now();
+    spIsPlaying    = data.is_playing;
 
-    if (data && data.item) {
-      const newUri = data.item.uri;
-      // Sync internal state variables used by the interpolator
-      spLastProgress = data.progress_ms || 0;
-      spLastDuration = data.item.duration_ms || 0;
-      spLastPollTime = Date.now();
-      spIsPlaying    = data.is_playing;
-
-      // Only rebuild the DOM when the track actually changes or on first load.
-      // When the same track is playing, the interpolator smoothly handles progress
-      // and we just do a lightweight play/pause button sync to avoid any jump.
-      if (newUri !== prevUri || prevUri === undefined) {
-        renderNowPlaying(data);
-      } else {
-        updatePlayPauseButtons(spIsPlaying);
-      }
-    } else {
-      spIsPlaying = false;
+    if (spCurrentTrackUri !== prevUri || prevUri === null) {
       renderNowPlaying(data);
+    } else {
+      updatePlayPauseButtons(spIsPlaying);
     }
   } catch(e) { console.warn('Spotify poll:', e); }
 }
@@ -640,12 +653,15 @@ function renderFocusTabNowPlaying(info) {
   if (!container) return;
 
   if (!info) {
-    container.innerHTML = `
-      <div class="sp-idle">Nothing playing right now</div>
-      <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem;background:var(--bg-elevated);color:var(--text-secondary);border:1px solid var(--border)">
-        Reconnect Spotify
-      </button>
-    `;
+    if (spToken) {
+      container.innerHTML =
+        '<div class="sp-idle" style="padding:1.5rem 0">Nothing playing right now</div>' +
+        '<div class="sp-idle" style="padding:0 0 .5rem;font-size:.68rem">Pick a playlist on the right to start</div>';
+    } else {
+      container.innerHTML =
+        '<div class="sp-idle">Not connected to Spotify</div>' +
+        '<button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Connect Spotify</button>';
+    }
     return;
   }
 
@@ -664,14 +680,24 @@ function renderFocusTabNowPlaying(info) {
       <span>${fmt(info.progress)}</span>
       <span>${fmt(info.duration)}</span>
     </div>
-    <div class="sp-controls">
-      <button class="sp-ctrl-btn" onclick="spPrev()" title="Previous">⏮</button>
-      <button class="sp-ctrl-btn play" onclick="spPlayPause()" title="${info.isPlaying?'Pause':'Play'}">
-        ${info.isPlaying ? '⏸' : '▶'}
-      </button>
-      <button class="sp-ctrl-btn" onclick="spNext()" title="Next">⏭</button>
+    <div class="sp-controls" style="flex-direction:column;gap:6px">
+      <div style="display:flex;align-items:center;justify-content:center;gap:16px">
+        <button class="sp-ctrl-btn" onclick="spPrev()" title="Previous">⏮</button>
+        <button class="sp-ctrl-btn play" onclick="spPlayPause()" title="${info.isPlaying?'Pause':'Play'}">
+          ${info.isPlaying ? '⏸' : '▶'}
+        </button>
+        <button class="sp-ctrl-btn" onclick="spNext()" title="Next">⏭</button>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px">
+        <button class="sp-ctrl-btn sp-shuffle-btn${spShuffleState ? ' active' : ''}" onclick="spToggleShuffle()" title="Shuffle">⇄</button>
+        <button class="sp-ctrl-btn sp-repeat-btn" onclick="spCycleRepeat()" title="Repeat" data-state="${spRepeatState}">${spRepeatState === 'track' ? '🔂' : spRepeatState === 'context' ? '🔁' : '↻'}</button>
+        <button class="sp-ctrl-btn sp-save-btn" onclick="spShowSaveMenu(event)" title="Add to playlist">＋</button>
+      </div>
     </div>
   `;
+  // Sync height after art loads
+  const art = container.querySelector('.sp-art-lg');
+  if (art) art.onload = function() { if (typeof syncFocusCardHeights === 'function') syncFocusCardHeights(); };
 }
 
 // ── Header widget (Spotify + Pomodoro) ───────────────────
@@ -775,6 +801,100 @@ async function spPrev() {
   await fetch('https://api.spotify.com/v1/me/player/previous', {
     method: 'POST', headers: { 'Authorization': `Bearer ${spToken}` }
   });
-  spCurrentTrack = null;
+  spCurrentTrackUri = null;
   setTimeout(fetchNowPlaying, 500);
+}
+
+async function spToggleShuffle() {
+  if (!spToken) return;
+  const newState = !spShuffleState;
+  await fetch('https://api.spotify.com/v1/me/player/shuffle?state=' + newState, {
+    method: 'PUT', headers: { 'Authorization': `Bearer ${spToken}` }
+  });
+  spShuffleState = newState;
+  updateShuffleRepeatButtons();
+}
+
+async function spCycleRepeat() {
+  if (!spToken) return;
+  const cycle = { 'off': 'context', 'context': 'track', 'track': 'off' };
+  const newState = cycle[spRepeatState] || 'off';
+  await fetch('https://api.spotify.com/v1/me/player/repeat?state=' + newState, {
+    method: 'PUT', headers: { 'Authorization': `Bearer ${spToken}` }
+  });
+  spRepeatState = newState;
+  updateShuffleRepeatButtons();
+}
+
+function updateShuffleRepeatButtons() {
+  var shuffleBtn = document.querySelector('.sp-shuffle-btn');
+  if (shuffleBtn) {
+    shuffleBtn.classList.toggle('active', spShuffleState);
+    shuffleBtn.title = spShuffleState ? 'Shuffle: On' : 'Shuffle: Off';
+  }
+  var repeatBtn = document.querySelector('.sp-repeat-btn');
+  if (repeatBtn) {
+    repeatBtn.setAttribute('data-state', spRepeatState);
+    repeatBtn.textContent = spRepeatState === 'track' ? '1' : spRepeatState === 'context' ? 'all' : 'off';
+    repeatBtn.title = 'Repeat: ' + spRepeatState;
+  }
+}
+
+// ── Save to playlist ──────────────────────────────────────
+function spShowSaveMenu(e) {
+  var existing = document.getElementById('sp-save-pop');
+  if (existing) { existing.remove(); return; }
+
+  var pop = document.createElement('div');
+  pop.id = 'sp-save-pop';
+  pop.style.cssText = 'position:fixed;z-index:1200;background:var(--bg-card);border:1px solid var(--border);' +
+    'border-radius:var(--r-md);box-shadow:0 8px 32px rgba(0,0,0,.18);padding:.5rem;min-width:200px;max-height:280px;overflow-y:auto;';
+  pop.innerHTML = '<div style="font-family:var(--font-mono);font-size:.65rem;color:var(--text-tertiary);padding:.3rem .5rem .5rem;text-transform:uppercase;letter-spacing:.08em">Add to playlist</div>';
+
+  // Populate with playlists from the existing list
+  var rows = document.querySelectorAll('.sp-playlist-row');
+  if (!rows.length) {
+    pop.innerHTML += '<div style="font-family:var(--font-mono);font-size:.72rem;color:var(--text-tertiary);padding:.5rem">No playlists loaded</div>';
+  }
+  rows.forEach(function(row) {
+    var nameEl = row.querySelector('.sp-playlist-name');
+    if (!nameEl) return;
+    var btn = document.createElement('button');
+    btn.style.cssText = 'display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;' +
+      'font-family:var(--font-mono);font-size:.75rem;color:var(--text-primary);padding:.4rem .5rem;border-radius:4px;';
+    btn.textContent = nameEl.textContent;
+    btn.onmouseenter = function() { btn.style.background = 'var(--bg-elevated)'; };
+    btn.onmouseleave = function() { btn.style.background = 'none'; };
+    btn.onclick = function() { spAddToPlaylist(row.dataset.uri || '', btn.textContent); pop.remove(); };
+    pop.appendChild(btn);
+  });
+
+  var rect = e.currentTarget.getBoundingClientRect();
+  pop.style.left = Math.max(8, rect.left - 160) + 'px';
+  pop.style.top  = (rect.bottom + 6) + 'px';
+  document.body.appendChild(pop);
+
+  setTimeout(function() {
+    document.addEventListener('click', function dismiss(ev) {
+      if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener('click', dismiss); }
+    });
+  }, 100);
+}
+
+async function spAddToPlaylist(playlistUri, playlistName) {
+  if (!spToken || !spCurrentTrackUri) return;
+  var playlistId = playlistUri.split(':')[2];
+  if (!playlistId) return;
+  var resp = await fetch('https://api.spotify.com/v1/playlists/' + playlistId + '/tracks', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + spToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uris: [spCurrentTrackUri] })
+  });
+  var msg = document.createElement('div');
+  msg.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--accent);' +
+    'color:#fff;font-family:var(--font-mono);font-size:.75rem;padding:.45rem 1rem;border-radius:999px;' +
+    'z-index:2000;pointer-events:none;opacity:1;transition:opacity .4s';
+  msg.textContent = resp.ok ? ('Added to ' + playlistName) : 'Could not add track';
+  document.body.appendChild(msg);
+  setTimeout(function() { msg.style.opacity = '0'; setTimeout(function() { msg.remove(); }, 400); }, 2200);
 }

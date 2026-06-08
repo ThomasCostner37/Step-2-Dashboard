@@ -511,6 +511,10 @@ function injectStyles() {
     .sp-ctrl-btn.play { width:44px; height:44px; background:#1DB954; color:#fff; border-radius:50%;
                         font-size:1rem; display:flex; align-items:center; justify-content:center; }
     .sp-ctrl-btn.play:hover { background:#1ed760; transform:scale(1.05); }
+    .sp-shuffle-btn.active, .sp-repeat-btn[data-state="context"],
+    .sp-repeat-btn[data-state="track"] { color:var(--accent) !important; }
+    .sp-shuffle-btn, .sp-repeat-btn { font-size:.8rem !important; }
+    .sp-save-btn { font-size:1rem !important; font-weight:400; }
     .sp-connect-btn { width:100%; padding:.65rem; background:#1DB954; color:#fff; border:none;
                       border-radius:var(--r-md); font-family:var(--font-mono); font-size:.78rem;
                       font-weight:600; cursor:pointer; transition:background .15s; }
