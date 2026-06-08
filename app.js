@@ -432,8 +432,65 @@ function injectStyles() {
     .sp-dot { width:6px; height:6px; border-radius:50%; background:#1DB954; flex-shrink:0; }
 
     /* Focus tab layout */
-    .focus-tab-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
-    @media (max-width:700px) { .focus-tab-grid { grid-template-columns:1fr; } }
+    .focus-tab-grid {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:18px;
+  align-items:stretch;
+}
+
+.focus-tab-grid > * {
+  min-width:0;
+}
+
+.sp-card,
+.pom-card {
+  min-width:0;
+}
+    @media (max-width:700px) {
+  .focus-tab-grid {
+    grid-template-columns:1fr;
+  }
+}
+
+.sp-playlist-row {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:.45rem .5rem;
+  border-radius:var(--r-sm);
+  cursor:pointer;
+  transition:background .12s;
+  border:1px solid transparent;
+  min-width:0;
+}
+
+.sp-playlist-meta {
+  min-width:0;
+  flex:1;
+}
+
+.sp-playlist-name {
+  font-family:var(--font-mono);
+  font-size:.75rem;
+  color:var(--text-primary);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.sp-playlist-count {
+  font-family:var(--font-mono);
+  font-size:.6rem;
+  color:var(--text-tertiary);
+}
+
+.sp-playlist-play {
+  margin-left:auto;
+  font-size:.9rem;
+  color:var(--text-tertiary);
+  flex-shrink:0;
+}
 
     /* Now Playing card */
     .sp-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.25rem; }
