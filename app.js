@@ -436,7 +436,7 @@ function injectStyles() {
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:18px;
-  align-items:start;
+  align-items:stretch;
 }
 
 .focus-tab-grid > * {
@@ -519,7 +519,7 @@ function injectStyles() {
                text-align:center; padding:2rem 1rem; }
 
     /* Pomodoro + moods card */
-    .pom-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.25rem; }
+    .pom-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.25rem; display:flex; flex-direction:column; }
     .pom-display { text-align:center; margin:.75rem 0 1rem; }
     .pom-time { font-family:var(--font-display); font-size:3.5rem; font-weight:800;
                 color:var(--accent); line-height:1; letter-spacing:-.03em; }

@@ -106,7 +106,7 @@ function injectSpotifyTab() {
         </div>
 
         <!-- RIGHT PANEL: POMODORO (top) + PLAYLISTS/QUOTES (bottom) -->
-        <div class="pom-card" style="display:flex;flex-direction:column;gap:0">
+        <div class="pom-card">
 
           <!-- POMODORO -->
           <div style="margin-bottom:1.1rem">
