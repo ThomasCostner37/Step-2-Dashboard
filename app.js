@@ -3195,7 +3195,7 @@ function injectSpotifyTab() {
             <div class="pom-controls" style="margin-bottom:0">
               <button class="pom-btn" onclick="pomReset()">Reset</button>
               <button class="pom-btn primary" id="focus-pom-start-btn" onclick="pomToggle()">Start</button>
-              <button class="pom-btn" onclick="pomOpenEdit()">Edit</button>
+              <button class="pom-btn" onclick="pomOpenEdit(event)">Edit</button>
             </div>
           </div>
 
@@ -3304,46 +3304,115 @@ function resetFocusQuoteTimer() {
 // ── Playlists ─────────────────────────────────────────────
 async function fetchSpotifyPlaylists() {
   if (!spToken) return;
+
   const container = document.getElementById('sp-playlists-list');
   if (!container) return;
+
+  container.innerHTML = '<div class="sp-idle" style="padding:.5rem 0">Loading playlists…</div>';
+
   try {
-    // Attempt fetch; retry once with refreshed token on 401
     let resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=20', {
-      headers: { 'Authorization': `Bearer ${spToken}` }
+      headers: { Authorization: `Bearer ${spToken}` }
     });
+
     if (resp.status === 401) {
       const ok = await refreshSpotifyToken();
-      if (!ok) return;
+      if (!ok) {
+        container.innerHTML = `
+          <div class="sp-idle" style="padding:.8rem 0">
+            Spotify session expired.
+          </div>
+          <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">
+            Reconnect Spotify
+          </button>
+        `;
+        return;
+      }
+
       resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=20', {
-        headers: { 'Authorization': `Bearer ${spToken}` }
+        headers: { Authorization: `Bearer ${spToken}` }
       });
     }
-    if (!resp.ok) return;
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      container.innerHTML = `
+        <div class="sp-idle" style="padding:.8rem 0">
+          Playlists could not load.<br>
+          <span style="font-size:.62rem;color:var(--text-tertiary)">
+            Spotify ${resp.status}${errText ? ': ' + escH(errText.slice(0,120)) : ''}
+          </span>
+        </div>
+        <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">
+          Reconnect Spotify
+        </button>
+      `;
+      return;
+    }
+
     const data = await resp.json();
+
     if (!data.items?.length) {
       container.innerHTML = '<div class="sp-idle" style="padding:.5rem 0">No playlists found</div>';
       return;
     }
+
     container.innerHTML = '';
+
     data.items.forEach(pl => {
       if (!pl) return;
+
       const img = pl.images?.[0]?.url || '';
       const div = document.createElement('div');
-      div.style.cssText = 'display:flex;align-items:center;gap:10px;padding:.45rem .5rem;border-radius:var(--r-sm);cursor:pointer;transition:background .12s;border:1px solid transparent';
-      div.onmouseenter = () => { div.style.background = 'var(--bg-elevated)'; div.style.borderColor = 'var(--border)'; };
-      div.onmouseleave = () => { div.style.background = ''; div.style.borderColor = 'transparent'; };
+
+      div.style.cssText =
+        'display:flex;align-items:center;gap:10px;padding:.45rem .5rem;border-radius:var(--r-sm);cursor:pointer;transition:background .12s;border:1px solid transparent';
+
+      div.onmouseenter = () => {
+        div.style.background = 'var(--bg-elevated)';
+        div.style.borderColor = 'var(--border)';
+      };
+
+      div.onmouseleave = () => {
+        div.style.background = '';
+        div.style.borderColor = 'transparent';
+      };
+
       div.innerHTML = `
-        ${img ? `<img src="${escH(img)}" style="width:38px;height:38px;border-radius:4px;object-fit:cover;flex-shrink:0">` : '<div style="width:38px;height:38px;border-radius:4px;background:var(--bg-elevated);flex-shrink:0"></div>'}
+        ${
+          img
+            ? `<img src="${escH(img)}" style="width:38px;height:38px;border-radius:4px;object-fit:cover;flex-shrink:0">`
+            : '<div style="width:38px;height:38px;border-radius:4px;background:var(--bg-elevated);flex-shrink:0"></div>'
+        }
         <div style="min-width:0">
-          <div style="font-family:var(--font-mono);font-size:.75rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(pl.name)}</div>
-          <div style="font-family:var(--font-mono);font-size:.6rem;color:var(--text-tertiary)">${pl.tracks?.total || 0} tracks</div>
+          <div style="font-family:var(--font-mono);font-size:.75rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            ${escH(pl.name)}
+          </div>
+          <div style="font-family:var(--font-mono);font-size:.6rem;color:var(--text-tertiary)">
+            ${pl.tracks?.total || 0} tracks
+          </div>
         </div>
         <div style="margin-left:auto;font-size:.9rem;color:var(--text-tertiary)">▶</div>
       `;
+
       div.onclick = () => playSpotifyPlaylist(pl.uri, pl.name);
       container.appendChild(div);
     });
-  } catch(e) { console.warn('Playlists fetch:', e); }
+  } catch (e) {
+    console.warn('Playlists fetch:', e);
+
+    container.innerHTML = `
+      <div class="sp-idle" style="padding:.8rem 0">
+        Playlists could not load.<br>
+        <span style="font-size:.62rem;color:var(--text-tertiary)">
+          ${escH(String(e))}
+        </span>
+      </div>
+      <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">
+        Reconnect Spotify
+      </button>
+    `;
+  }
 }
 
 async function playSpotifyPlaylist(uri, name) {
@@ -3719,7 +3788,7 @@ function ensureHeaderWidgets(info) {
       <div class="hdr-pom-btns">
         <button class="hdr-pom-btn" id="hdr-pom-start" onclick="pomToggle()" title="Start/Pause">▶</button>
         <button class="hdr-pom-btn" onclick="pomReset()" title="Reset">↺</button>
-        <button class="hdr-pom-btn" onclick="pomOpenEdit()" title="Edit">✎</button>
+        <button class="hdr-pom-btn" onclick="pomOpenEdit(event)" title="Edit">✎</button>
       </div>
     `;
     const saveStatus = document.getElementById('save-status');
@@ -3756,14 +3825,38 @@ function ensureHeaderWidgets(info) {
   }
 }
 
-function pomOpenEdit() {
+function pomOpenEdit(e) {
+  ensureHeaderWidgets();
+
   const pop = document.getElementById('pom-edit-pop');
-  const sec = document.getElementById('pom-header-section');
-  if (!pop || !sec) return;
-  const rect = sec.getBoundingClientRect();
+  if (!pop) return;
+
+  const anchor =
+    e?.currentTarget ||
+    document.getElementById('pom-header-section') ||
+    document.getElementById('focus-pom-start-btn');
+
+  if (!anchor) return;
+
+  const rect = anchor.getBoundingClientRect();
+
   pop.style.display = 'block';
-  pop.style.top  = (rect.bottom + 8) + 'px';
-  pop.style.right = (window.innerWidth - rect.right) + 'px';
+
+  const pw = 260;
+  const ph = 90;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  let left = rect.left;
+  let top = rect.bottom + 8;
+
+  if (left + pw > vw - 16) left = vw - pw - 16;
+  if (top + ph > vh - 16) top = rect.top - ph - 8;
+
+  pop.style.left = Math.max(16, left) + 'px';
+  pop.style.top = Math.max(16, top) + 'px';
+  pop.style.right = 'auto';
+  pop.style.transform = 'none';
 }
 
 function pomCloseEdit() {
