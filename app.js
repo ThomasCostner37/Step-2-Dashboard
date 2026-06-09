@@ -22,10 +22,14 @@ function prioBadge(prio, size) {
   return `<span style="font-family:var(--font-mono);font-size:.55rem;padding:1px 6px;border-radius:10px;background:${bg};color:${color};border:1px solid ${border};flex-shrink:0">${label}</span>`;
 }
 
+function pctToPriority(pct) {
 
   if (pct <= 60) return 'high';
+
   if (pct <= 70) return 'medium';
+
   return 'low';
+
 }
 
 // ── State ─────────────────────────────────────────────────
@@ -127,6 +131,9 @@ window.handleSignOut = function () {
   document.getElementById('app').classList.remove('visible');
   document.getElementById('auth-screen').style.display = 'flex';
 };
+
+document.getElementById('sign-in-btn')?.addEventListener('click', window.handleSignIn);
+document.getElementById('sign-out-btn')?.addEventListener('click', window.handleSignOut);
 
 // ── Drive Sync ────────────────────────────────────────────
 async function loadFromDrive() {
