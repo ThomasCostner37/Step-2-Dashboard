@@ -17,6 +17,7 @@ const SPOTIFY_SCOPES      = [
   'playlist-modify-private',
   'user-library-modify',
   'user-library-read',
+  'user-read-recently-played',
 ].join(' ');
 
 let spToken        = null;
@@ -229,7 +230,7 @@ function injectSpotifyTab() {
           </div>
         </div>
       </div>
-      <canvas id="sp-vibe-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:50;opacity:0;transition:opacity 1.2s ease;display:none"></canvas>
+      <canvas id="sp-vibe-canvas" style="position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:5;opacity:0;transition:opacity 1.2s ease;display:none"></canvas>
     `;
     app.appendChild(panel);
   }
@@ -777,9 +778,7 @@ function renderFocusTabNowPlaying(info) {
 
   if (!info) {
     container.innerHTML = spToken
-      ? `<div class="sp-idle" style="padding:1.2rem 0 .4rem;font-size:.85rem">Nothing playing right now</div>
-         <div class="sp-idle" style="font-size:.68rem;padding:0 0 .8rem">Start playing something in Spotify, then come back</div>
-         <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.2rem;background:var(--bg-elevated);border:1px solid var(--border);color:var(--accent-text)">↻ Reconnect Spotify</button>`
+      ? (() => { fetchLastPlayed(); return '<div class="sp-idle" style="padding:1rem 0 .3rem;font-size:.78rem;color:var(--text-tertiary)">Loading last played…</div>'; })()
       : '<div class="sp-idle">Not connected to Spotify</div><button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Connect Spotify</button>';
     return;
   }
@@ -854,7 +853,7 @@ function spToggleVibe() {
 
   if (spVibeActive) {
     canvas.style.display = 'block';
-    requestAnimationFrame(() => { canvas.style.opacity = '0.7'; });
+    requestAnimationFrame(() => { canvas.style.opacity = '1'; });
     startVibeEngine(canvas);
   } else {
     canvas.style.opacity = '0';
@@ -910,7 +909,7 @@ function startVibeEngine(canvas) {
     const H = canvas.height;
 
     // Stronger clear = shorter, more subtle trails
-    ctx2d.fillStyle = 'rgba(245, 240, 232, 0.4)';
+    ctx2d.fillStyle = 'rgba(245, 240, 232, 0.08)';
     ctx2d.fillRect(0, 0, W, H);
 
     // 3 rings, smaller radius, very low alpha
@@ -1151,6 +1150,52 @@ async function spAddToPlaylist(playlistUri, playlistName) {
 }
 
 // ── Toast ─────────────────────────────────────────────────
+
+// ── Last played fallback (shown when nothing is currently playing) ────
+async function fetchLastPlayed() {
+  if (!spToken) return;
+  try {
+    let resp = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=1', {
+      headers: { 'Authorization': `Bearer ${spToken}` }
+    });
+    if (resp.status === 401) {
+      const ok = await refreshSpotifyToken();
+      if (!ok) return;
+      resp = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=1', {
+        headers: { 'Authorization': `Bearer ${spToken}` }
+      });
+    }
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const item = data.items?.[0]?.track;
+    if (!item) return;
+
+    const container = document.getElementById('sp-main-content');
+    if (!container) return;
+
+    const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
+    container.innerHTML = `
+      <div style="position:relative">
+        <img class="sp-art-lg" src="${escH(item.album?.images?.[0]?.url || '')}" alt="${escH(item.name)}"
+             onerror="this.style.background='var(--bg-elevated)'">
+        <div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.55);color:#fff;
+                    font-family:var(--font-mono);font-size:.58rem;padding:2px 7px;border-radius:3px;letter-spacing:.04em">
+          LAST PLAYED
+        </div>
+      </div>
+      <div class="sp-track-lg">${escH(item.name)}</div>
+      <div class="sp-artist-lg">${escH(item.artists?.map(a => a.name).join(', ') || '')}</div>
+      <div class="sp-idle" style="padding:.6rem 0 .3rem;font-size:.68rem">Nothing playing · Play something in Spotify to see live controls</div>
+      <button class="sp-connect-btn" onclick="spotifyLogin()"
+        style="background:var(--bg-elevated);border:1px solid var(--border);color:var(--accent-text);margin-top:.3rem">
+        ↻ Reconnect
+      </button>
+    `;
+  } catch(e) {
+    console.warn('fetchLastPlayed:', e);
+  }
+}
+
 function showToast(text, duration) {
   const msg = document.createElement('div');
   msg.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg-card);' +
