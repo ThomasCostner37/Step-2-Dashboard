@@ -475,6 +475,7 @@ async function exchangeSpotifyCode(code) {
     initSpotifyPlayer();
     startSpotifyPoll();
     setTimeout(fetchSpotifyPlaylists, 1500);
+    setTimeout(fetchLastPlayed, 800);
 
     const pending = localStorage.getItem('sp_pending_add');
     if (pending) {
@@ -528,6 +529,8 @@ function initSpotify() {
     spToken = saved;
     initSpotifyPlayer();
     startSpotifyPoll();
+    // Show last played immediately while waiting for poll — feels snappier on load
+    setTimeout(fetchLastPlayed, 400);
   }
 
   if (!window.Spotify && !document.getElementById('sp-sdk')) {
@@ -592,7 +595,8 @@ async function fetchNowPlaying() {
       headers: { 'Authorization': `Bearer ${spToken}` }
     });
     if (resp.status === 204 || (resp.status === 200 && resp.headers.get('content-length') === '0')) {
-      renderNowPlaying(null); return;
+      // Nothing playing — show last played instead of blank state
+      fetchLastPlayed(); return;
     }
     if (resp.status === 401) {
       const ok = await refreshSpotifyToken();
@@ -750,20 +754,22 @@ function updateNowPlayingFromSDK(sdkState) {
 function renderNowPlaying(data) {
   if (!data || !data.item) { renderNowPlayingDirect(null); return; }
   const item      = data.item;
-  const isPodcast = data.currently_playing_type === 'episode';
+  const isPodcast = data.currently_playing_type === 'episode' || item.type === 'episode';
+  // Safely extract artwork — episodes store images on show, tracks on album
+  const artUrl = isPodcast
+    ? (item.show?.images?.[0]?.url || item.images?.[0]?.url || '')
+    : (item.album?.images?.[0]?.url || item.images?.[0]?.url || '');
   renderNowPlayingDirect({
     isPlaying:  data.is_playing,
-    trackName:  item.name,
+    trackName:  item.name || 'Unknown',
     artistName: isPodcast
-      ? (item.show?.name || item.show?.publisher || 'Podcast')
+      ? (item.show?.name || item.show?.publisher || item.show?.description?.slice(0,40) || 'Podcast')
       : (item.artists?.map(a => a.name).join(', ') || ''),
-    albumArt: isPodcast
-      ? (item.images?.[0]?.url || item.show?.images?.[0]?.url || '')
-      : (item.album?.images?.[0]?.url || ''),
+    albumArt:   artUrl,
     albumName:  isPodcast ? (item.show?.name || '') : (item.album?.name || ''),
-    progress:   data.progress_ms,
-    duration:   item.duration_ms,
-    trackUri:   item.uri,
+    progress:   data.progress_ms || 0,
+    duration:   item.duration_ms || 0,
+    trackUri:   item.uri || '',
   });
 }
 
@@ -849,109 +855,72 @@ function spToggleVibe() {
   });
 
   const canvas = document.getElementById('sp-vibe-canvas');
-  if (!canvas) return;
-
   if (spVibeActive) {
-    canvas.style.display = 'block';
-    requestAnimationFrame(() => { canvas.style.opacity = '1'; });
     startVibeEngine(canvas);
   } else {
-    canvas.style.opacity = '0';
-    setTimeout(() => { canvas.style.display = 'none'; }, 1200);
     stopVibeEngine();
   }
 }
 
 function startVibeEngine(canvas) {
   stopVibeEngine();
-  const ctx2d = canvas.getContext('2d');
+  // Sample album art colour and drive a CSS glow + background gradient on the sp-card
+  const art = document.querySelector('.sp-art-lg');
+  const spCard = document.querySelector('.sp-card');
+  if (!spCard) return;
 
-  const palette = [
-    [201, 113, 58],   // amber
-    [29, 185, 84],    // spotify green
-    [100, 60, 200],   // purple
-    [220, 60, 60],    // red
-    [40, 160, 220],   // blue
-  ];
-  let paletteIdx = 0;
-  let frame      = 0;
-  let beatPhase  = 0;
-
-  function resize() {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
+  // Extract dominant colour from album art via canvas sampling
+  function sampleArtColor() {
+    if (!art || !art.complete || !art.naturalWidth) return [176, 120, 48]; // amber fallback
+    try {
+      const tmp = document.createElement('canvas');
+      tmp.width = 8; tmp.height = 8;
+      const ctx = tmp.getContext('2d');
+      ctx.drawImage(art, 0, 0, 8, 8);
+      const px = ctx.getImageData(2, 2, 4, 4).data;
+      let r=0,g=0,b=0,n=0;
+      for (let i=0;i<px.length;i+=4){ r+=px[i]; g+=px[i+1]; b+=px[i+2]; n++; }
+      return [Math.round(r/n), Math.round(g/n), Math.round(b/n)];
+    } catch(e) { return [176, 120, 48]; }
   }
-  resize();
-  window.addEventListener('resize', resize);
+
+  let [r,g,b] = sampleArtColor();
+  // If art not loaded yet, wait then resample
+  if (art && !art.complete) {
+    art.addEventListener('load', () => { [r,g,b] = sampleArtColor(); applyGlow(); });
+  }
+
+  function applyGlow() {
+    if (!spVibeActive) return;
+    spCard.style.transition = 'box-shadow 2s ease, background 2s ease';
+    spCard.style.boxShadow  = `0 0 60px 12px rgba(${r},${g},${b},0.35), 0 0 120px 30px rgba(${r},${g},${b},0.15)`;
+    spCard.style.background = `linear-gradient(160deg, rgba(${r},${g},${b},0.08) 0%, var(--bg-card) 60%)`;
+  }
+
+  applyGlow();
+
+  // Pulse the glow in time with estimated beat (120bpm)
+  const bpm = 120;
+  const msPerBeat = 60000 / bpm;
 
   function tick() {
-    if (!spVibeActive) return;
+    if (!spVibeActive) { spVibeRaf = null; return; }
     spVibeRaf = requestAnimationFrame(tick);
-    frame++;
 
-    const bpm       = 120;
-    const msPerBeat = 60000 / bpm;
-    const elapsed   = Date.now() - spLastPollTime;
-    const curPos    = spLastProgress + (spIsPlaying ? elapsed : 0);
-    beatPhase = ((curPos % msPerBeat) / msPerBeat);
-
-    // Subtle pulse — gentle attack, slow decay
-    const pulse = Math.pow(Math.sin(beatPhase * Math.PI), 0.5) * (spIsPlaying ? 1 : 0.15);
-
-    if (frame % 300 === 0) paletteIdx = (paletteIdx + 1) % palette.length;
-    const nextIdx = (paletteIdx + 1) % palette.length;
-    const t = (frame % 300) / 300;
-    const r = Math.round(palette[paletteIdx][0] + (palette[nextIdx][0] - palette[paletteIdx][0]) * t);
-    const g = Math.round(palette[paletteIdx][1] + (palette[nextIdx][1] - palette[paletteIdx][1]) * t);
-    const b = Math.round(palette[paletteIdx][2] + (palette[nextIdx][2] - palette[paletteIdx][2]) * t);
-
-    const W = canvas.width;
-    const H = canvas.height;
-
-    // Stronger clear = shorter, more subtle trails
-    ctx2d.fillStyle = 'rgba(245, 240, 232, 0.08)';
-    ctx2d.fillRect(0, 0, W, H);
-
-    // 3 rings, smaller radius, very low alpha
-    const rings = 3;
-    for (let i = 0; i < rings; i++) {
-      const ringPhase = (beatPhase + i / rings) % 1;
-      const radius    = ringPhase * Math.max(W, H) * 0.5;
-      const alpha     = (1 - ringPhase) * pulse * 0.15;
-      ctx2d.beginPath();
-      ctx2d.arc(W / 2, H / 2, radius, 0, Math.PI * 2);
-      ctx2d.strokeStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
-      ctx2d.lineWidth = 1.5 + (1 - ringPhase) * 2.5;
-      ctx2d.stroke();
+    const elapsed  = Date.now() - spLastPollTime;
+    const curPos   = spLastProgress + (spIsPlaying ? elapsed : 0);
+    const phase    = (curPos % msPerBeat) / msPerBeat;
+    const pulse    = Math.pow(Math.sin(phase * Math.PI), 2) * (spIsPlaying ? 1 : 0.3);
+    const glow1    = (0.25 + pulse * 0.25).toFixed(3);
+    const glow2    = (0.10 + pulse * 0.12).toFixed(3);
+    const spread1  = Math.round(60 + pulse * 30);
+    const spread2  = Math.round(120 + pulse * 60);
+    if (spCard) {
+      spCard.style.boxShadow = `0 0 ${spread1}px 12px rgba(${r},${g},${b},${glow1}), 0 0 ${spread2}px 30px rgba(${r},${g},${b},${glow2})`;
     }
-
-    // Sparse, very faint particles
-    if (frame % 5 === 0 && spIsPlaying) {
-      if (!spVibeEngineState.particles) spVibeEngineState.particles = [];
-      if (spVibeEngineState.particles.length < 120) {
-        spVibeEngineState.particles.push({
-          x:     W * 0.15 + Math.random() * W * 0.7,
-          y:     H + 10,
-          size:  1 + Math.random() * 2.5 * pulse,
-          speed: 0.3 + Math.random() * 0.8,
-          alpha: 0.12 + Math.random() * 0.18 * pulse,
-          drift: (Math.random() - 0.5) * 0.4,
-        });
-      }
-    }
-
-    if (spVibeEngineState.particles) {
-      spVibeEngineState.particles = spVibeEngineState.particles.filter(p => p.alpha > 0.005);
-      spVibeEngineState.particles.forEach(p => {
-        p.y    -= p.speed;
-        p.x    += p.drift;
-        p.alpha *= 0.994;
-        ctx2d.beginPath();
-        ctx2d.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx2d.fillStyle = `rgba(${r},${g},${b},${p.alpha.toFixed(3)})`;
-        ctx2d.fill();
-      });
-    }
+    // Also shift bg gradient slightly on beat
+    const bgA = (0.06 + pulse * 0.08).toFixed(3);
+    if (spCard) spCard.style.background = `linear-gradient(160deg, rgba(${r},${g},${b},${bgA}) 0%, var(--bg-card) 65%)`;
   }
 
   tick();
@@ -962,6 +931,13 @@ const spVibeEngineState = { particles: [] };
 function stopVibeEngine() {
   if (spVibeRaf) { cancelAnimationFrame(spVibeRaf); spVibeRaf = null; }
   spVibeEngineState.particles = [];
+  // Clean up card glow
+  const spCard = document.querySelector('.sp-card');
+  if (spCard) {
+    spCard.style.transition = 'box-shadow 1s ease, background 1s ease';
+    spCard.style.boxShadow  = '';
+    spCard.style.background = '';
+  }
   const canvas = document.getElementById('sp-vibe-canvas');
   if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); }
 }
