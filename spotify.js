@@ -879,6 +879,17 @@ function spToggleAddMode() {
 }
 
 
+function showToast(text, duration) {
+  var msg = document.createElement('div');
+  msg.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg-card);' +
+    'border:1px solid var(--border-bright);color:var(--text-primary);font-family:var(--font-mono);font-size:.75rem;' +
+    'padding:.45rem 1rem;border-radius:999px;z-index:2000;pointer-events:none;opacity:1;transition:opacity .4s;' +
+    'white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.15)';
+  msg.textContent = text;
+  document.body.appendChild(msg);
+  setTimeout(function() { msg.style.opacity = '0'; setTimeout(function() { msg.remove(); }, 400); }, duration || 2200);
+}
+
 async function spAddToPlaylist(playlistUri, playlistName) {
   if (!spToken || !spCurrentTrackUri) return;
   var playlistId = playlistUri.split(':')[2];
@@ -888,6 +899,17 @@ async function spAddToPlaylist(playlistUri, playlistName) {
     headers: { 'Authorization': 'Bearer ' + spToken, 'Content-Type': 'application/json' },
     body: JSON.stringify({ uris: [spCurrentTrackUri] })
   });
+
+  // 403 = token lacks playlist-modify scope (stale login). Force fresh auth.
+  if (resp.status === 403) {
+    localStorage.removeItem('sp_token');
+    localStorage.removeItem('sp_refresh');
+    spToken = null;
+    showToast('Spotify needs re-login for playlist editing. Reconnecting…', 3000);
+    setTimeout(() => spotifyLogin(), 1800);
+    return;
+  }
+
   var msg = document.createElement('div');
   msg.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--accent);' +
     'color:#fff;font-family:var(--font-mono);font-size:.75rem;padding:.45rem 1rem;border-radius:999px;' +
