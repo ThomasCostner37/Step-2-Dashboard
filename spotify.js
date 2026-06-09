@@ -86,7 +86,7 @@ let focusQuoteIdx   = Math.floor(Math.random() * ALL_QUOTES.length);
 let focusQuoteTimer = null;
 let focusRightMode  = 'playlists';
 
-// ── SVG icon helpers (Spotify-style) ─────────────────────
+// ── SVG icon helpers ──────────────────────────────────────
 function svgShuffle(active) {
   const c = active ? '#1DB954' : 'currentColor';
   return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -126,26 +126,28 @@ function svgHeart(filled) {
        </svg>`;
 }
 
-function svgAddToPlaylist() {
-  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <line x1="12" y1="5" x2="12" y2="19"></line>
-    <line x1="5" y1="12" x2="19" y2="12"></line>
+// Add to playlist: queue-list + plus badge icon
+function svgAddToPlaylist(active) {
+  const c = active ? '#1DB954' : 'currentColor';
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <line x1="3" y1="6" x2="15" y2="6"></line>
-    <line x1="3" y1="10" x2="10" y2="10"></line>
+    <line x1="3" y1="10" x2="12" y2="10"></line>
     <line x1="3" y1="14" x2="10" y2="14"></line>
-    <line x1="3" y1="18" x2="10" y2="18"></line>
+    <circle cx="18" cy="16" r="4"></circle>
+    <line x1="18" y1="13" x2="18" y2="19"></line>
+    <line x1="15" y1="16" x2="21" y2="16"></line>
   </svg>`;
 }
 
+// Vibe: audio waveform bars
 function svgVibe(active) {
   const c = active ? '#C9913A' : 'currentColor';
-  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M9 18V5l12-2v13"></path>
-    <circle cx="6" cy="18" r="3"></circle>
-    <circle cx="18" cy="16" r="3"></circle>
-    <line x1="6" y1="6" x2="6" y2="9" stroke="${c}"></line>
-    <line x1="10" y1="5" x2="10" y2="8" stroke="${c}"></line>
-    <line x1="14" y1="4" x2="14" y2="7" stroke="${c}"></line>
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round">
+    <line x1="4" y1="9" x2="4" y2="15"></line>
+    <line x1="8" y1="5" x2="8" y2="19"></line>
+    <line x1="12" y1="8" x2="12" y2="16"></line>
+    <line x1="16" y1="4" x2="16" y2="20"></line>
+    <line x1="20" y1="9" x2="20" y2="15"></line>
   </svg>`;
 }
 
@@ -171,6 +173,9 @@ function injectSpotifyTab() {
         <div class="sp-card">
           <div class="dash-head" style="margin-bottom:.85rem">
             <div class="dash-title">Now Playing</div>
+            <button id="sp-vibe-header-btn" class="sp-text-btn" onclick="spToggleVibe()" style="font-size:.58rem;padding:3px 8px">
+              ${svgVibe(false)} Vibe
+            </button>
           </div>
           <div id="sp-main-content">
             <div class="sp-idle">Not connected to Spotify</div>
@@ -224,7 +229,6 @@ function injectSpotifyTab() {
           </div>
         </div>
       </div>
-      <!-- Vibe canvas — behind everything, covers focus tab -->
       <canvas id="sp-vibe-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0;transition:opacity 1.2s ease;display:none"></canvas>
     `;
     app.appendChild(panel);
@@ -546,9 +550,7 @@ function initSpotifyPlayer() {
     getOAuthToken: cb => cb(spToken),
     volume: 0.8,
   });
-  spPlayer.addListener('ready', ({ device_id }) => {
-    spDeviceId = device_id;
-  });
+  spPlayer.addListener('ready', ({ device_id }) => { spDeviceId = device_id; });
   spPlayer.addListener('player_state_changed', state => {
     if (!state) return;
     updateNowPlayingFromSDK(state);
@@ -618,7 +620,6 @@ async function fetchNowPlaying() {
     spIsPlaying       = data.is_playing;
 
     if (spCurrentTrackUri !== prevUri || prevUri === null) {
-      // New track — check liked state then full render
       checkLikedState(data.item.uri);
       renderNowPlaying(data);
     } else {
@@ -674,7 +675,6 @@ function spSeek(e) {
   const rect = wrap.getBoundingClientRect();
   const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
   const posMs = Math.floor(pct * spLastDuration);
-  // Optimistic update
   spLastProgress = posMs;
   spLastPollTime = Date.now();
   const bar = wrap.querySelector('.sp-progress-bar');
@@ -685,7 +685,7 @@ function spSeek(e) {
   }).catch(() => {});
 }
 
-// ── Playback buttons (lightweight update, no re-render) ───
+// ── Lightweight button updates ────────────────────────────
 function updatePlayPauseButtons(isPlaying) {
   const icon  = isPlaying ? '⏸' : '▶';
   const title = isPlaying ? 'Pause' : 'Play';
@@ -739,18 +739,24 @@ function updateNowPlayingFromSDK(sdkState) {
 }
 
 // ── Render pipeline ───────────────────────────────────────
+// FIX #5: Handle podcasts (currently_playing_type === 'episode')
 function renderNowPlaying(data) {
   if (!data || !data.item) { renderNowPlayingDirect(null); return; }
-  const track = data.item;
+  const item      = data.item;
+  const isPodcast = data.currently_playing_type === 'episode';
   renderNowPlayingDirect({
     isPlaying:  data.is_playing,
-    trackName:  track.name,
-    artistName: track.artists.map(a => a.name).join(', '),
-    albumArt:   track.album.images[0]?.url || '',
-    albumName:  track.album.name,
+    trackName:  item.name,
+    artistName: isPodcast
+      ? (item.show?.name || item.show?.publisher || 'Podcast')
+      : (item.artists?.map(a => a.name).join(', ') || ''),
+    albumArt: isPodcast
+      ? (item.images?.[0]?.url || item.show?.images?.[0]?.url || '')
+      : (item.album?.images?.[0]?.url || ''),
+    albumName:  isPodcast ? (item.show?.name || '') : (item.album?.name || ''),
     progress:   data.progress_ms,
-    duration:   track.duration_ms,
-    trackUri:   track.uri,
+    duration:   item.duration_ms,
+    trackUri:   item.uri,
   });
 }
 
@@ -778,15 +784,13 @@ function renderFocusTabNowPlaying(info) {
          onerror="this.style.background='var(--bg-elevated)'">
     <div class="sp-track-lg">${escH(info.trackName)}</div>
     <div class="sp-artist-lg">${escH(info.artistName)}</div>
-
-    <div class="sp-progress-wrap" onclick="spSeek(event)" style="cursor:pointer" title="Click to seek">
+    <div class="sp-progress-wrap" onclick="spSeek(event)" title="Click to seek">
       <div class="sp-progress-bar" style="width:${pct.toFixed(2)}%"></div>
     </div>
     <div class="sp-time-row">
       <span>${fmt(info.progress)}</span>
       <span>${fmt(info.duration)}</span>
     </div>
-
     <div class="sp-controls" style="flex-direction:column;gap:8px">
       <div style="display:flex;align-items:center;justify-content:center;gap:16px">
         <button class="sp-ctrl-btn" onclick="spPrev()" title="Previous">⏮</button>
@@ -809,19 +813,13 @@ function renderFocusTabNowPlaying(info) {
           title="${spIsLiked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}">
           ${svgHeart(spIsLiked)}
         </button>
-        <button class="sp-icon-btn sp-save-btn${spAddMode ? ' active' : ''}" onclick="spToggleAddMode()"
-          title="Add to playlist">
-          ${svgAddToPlaylist()}
-        </button>
-        <button class="sp-icon-btn sp-vibe-btn${spVibeActive ? ' active' : ''}" onclick="spToggleVibe()"
-          title="${spVibeActive ? 'Vibe Mode: On' : 'Vibe Mode: Off'}">
-          ${svgVibe(spVibeActive)}
+        <button class="sp-text-btn sp-save-btn${spAddMode ? ' active' : ''}" onclick="spToggleAddMode()">
+          ${svgAddToPlaylist(spAddMode)} + Playlist
         </button>
       </div>
     </div>
   `;
 
-  // Make progress bar hover expand
   const wrap = container.querySelector('.sp-progress-wrap');
   if (wrap) {
     wrap.addEventListener('mouseenter', () => { wrap.style.height = '6px'; });
@@ -832,15 +830,14 @@ function renderFocusTabNowPlaying(info) {
   if (art) art.onload = () => { if (typeof syncFocusCardHeights === 'function') syncFocusCardHeights(); };
 }
 
-// ── Vibe Mode (music-reactive background) ─────────────────
+// ── Vibe Mode ─────────────────────────────────────────────
 function spToggleVibe() {
   spVibeActive = !spVibeActive;
 
-  // Update all vibe buttons
-  document.querySelectorAll('.sp-vibe-btn').forEach(btn => {
-    btn.innerHTML = svgVibe(spVibeActive);
+  // Sync all vibe buttons (header persistent + any in controls row)
+  document.querySelectorAll('.sp-vibe-btn, #sp-vibe-header-btn').forEach(btn => {
+    btn.innerHTML = svgVibe(spVibeActive) + ' Vibe';
     btn.classList.toggle('active', spVibeActive);
-    btn.title = spVibeActive ? 'Vibe Mode: On' : 'Vibe Mode: Off';
   });
 
   const canvas = document.getElementById('sp-vibe-canvas');
@@ -848,7 +845,7 @@ function spToggleVibe() {
 
   if (spVibeActive) {
     canvas.style.display = 'block';
-    requestAnimationFrame(() => { canvas.style.opacity = '1'; });
+    requestAnimationFrame(() => { canvas.style.opacity = '0.5'; });
     startVibeEngine(canvas);
   } else {
     canvas.style.opacity = '0';
@@ -858,36 +855,18 @@ function spToggleVibe() {
 }
 
 function startVibeEngine(canvas) {
-  // Try to connect to the Spotify SDK audio stream via Web Audio API
-  // Falls back to a pulse-only simulation if SDK audio isn't capturable
   stopVibeEngine();
-
   const ctx2d = canvas.getContext('2d');
 
-  // Attempt real audio analysis via SDK
-  let analyser = null;
-  let dataArr  = null;
-
-  if (spPlayer && window.AudioContext) {
-    try {
-      if (!spVibeCtx) spVibeCtx = new AudioContext();
-      if (spVibeCtx.state === 'suspended') spVibeCtx.resume();
-      // SDK doesn't expose its audio node directly, so we use simulation
-      // (Web Playback SDK audio runs in an internal audio context we can't capture)
-    } catch(e) {}
-  }
-
-  // Simulation engine: BPM-synced pulse using progress interpolation
-  let frame = 0;
-  let hue   = 200; // starts blue-ish, shifts over time
   const palette = [
-    [201, 113, 58],  // amber
-    [29, 185, 84],   // spotify green
-    [100, 60, 200],  // purple
-    [220, 60, 60],   // red
-    [40, 160, 220],  // blue
+    [201, 113, 58],   // amber
+    [29, 185, 84],    // spotify green
+    [100, 60, 200],   // purple
+    [220, 60, 60],    // red
+    [40, 160, 220],   // blue
   ];
   let paletteIdx = 0;
+  let frame      = 0;
   let beatPhase  = 0;
 
   function resize() {
@@ -902,63 +881,63 @@ function startVibeEngine(canvas) {
     spVibeRaf = requestAnimationFrame(tick);
     frame++;
 
-    // Estimate beat from progress (assume ~120bpm → 500ms per beat)
-    const bpm      = 120;
+    const bpm       = 120;
     const msPerBeat = 60000 / bpm;
     const elapsed   = Date.now() - spLastPollTime;
     const curPos    = spLastProgress + (spIsPlaying ? elapsed : 0);
     beatPhase = ((curPos % msPerBeat) / msPerBeat);
 
-    // Beat pulse intensity: sharp attack, slow decay
-    const pulse = Math.pow(Math.sin(beatPhase * Math.PI), 0.3) * (spIsPlaying ? 1 : 0.2);
+    // Subtle pulse — gentle attack, slow decay
+    const pulse = Math.pow(Math.sin(beatPhase * Math.PI), 0.5) * (spIsPlaying ? 1 : 0.15);
 
-    // Shift palette slowly
     if (frame % 300 === 0) paletteIdx = (paletteIdx + 1) % palette.length;
     const nextIdx = (paletteIdx + 1) % palette.length;
-    const lerp = (a, b, t) => a + (b - a) * ((frame % 300) / 300);
-    const r = Math.round(lerp(palette[paletteIdx][0], palette[nextIdx][0], (frame % 300) / 300));
-    const g = Math.round(lerp(palette[paletteIdx][1], palette[nextIdx][1], (frame % 300) / 300));
-    const b = Math.round(lerp(palette[paletteIdx][2], palette[nextIdx][2], (frame % 300) / 300));
+    const t = (frame % 300) / 300;
+    const r = Math.round(palette[paletteIdx][0] + (palette[nextIdx][0] - palette[paletteIdx][0]) * t);
+    const g = Math.round(palette[paletteIdx][1] + (palette[nextIdx][1] - palette[paletteIdx][1]) * t);
+    const b = Math.round(palette[paletteIdx][2] + (palette[nextIdx][2] - palette[paletteIdx][2]) * t);
 
     const W = canvas.width;
     const H = canvas.height;
 
-    // Clear with very slight trail
-    ctx2d.fillStyle = 'rgba(245, 240, 232, 0.18)';
+    // Stronger clear = shorter, more subtle trails
+    ctx2d.fillStyle = 'rgba(245, 240, 232, 0.4)';
     ctx2d.fillRect(0, 0, W, H);
 
-    // Draw expanding rings from center on beat
-    const rings = 4;
+    // 3 rings, smaller radius, very low alpha
+    const rings = 3;
     for (let i = 0; i < rings; i++) {
       const ringPhase = (beatPhase + i / rings) % 1;
-      const radius    = ringPhase * Math.max(W, H) * 0.75;
-      const alpha     = (1 - ringPhase) * pulse * 0.18;
+      const radius    = ringPhase * Math.max(W, H) * 0.5;
+      const alpha     = (1 - ringPhase) * pulse * 0.06;
       ctx2d.beginPath();
       ctx2d.arc(W / 2, H / 2, radius, 0, Math.PI * 2);
       ctx2d.strokeStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
-      ctx2d.lineWidth = 2 + (1 - ringPhase) * 4;
+      ctx2d.lineWidth = 1.5 + (1 - ringPhase) * 2.5;
       ctx2d.stroke();
     }
 
-    // Floating particles that drift upward
-    if (frame % 4 === 0 && spIsPlaying) {
+    // Sparse, very faint particles
+    if (frame % 8 === 0 && spIsPlaying) {
       if (!spVibeEngineState.particles) spVibeEngineState.particles = [];
-      spVibeEngineState.particles.push({
-        x: W * 0.2 + Math.random() * W * 0.6,
-        y: H + 10,
-        size: 2 + Math.random() * 4 * pulse,
-        speed: 0.4 + Math.random() * 1.2,
-        alpha: 0.3 + Math.random() * 0.4 * pulse,
-        drift: (Math.random() - 0.5) * 0.5,
-      });
+      if (spVibeEngineState.particles.length < 60) {
+        spVibeEngineState.particles.push({
+          x:     W * 0.15 + Math.random() * W * 0.7,
+          y:     H + 10,
+          size:  1 + Math.random() * 2.5 * pulse,
+          speed: 0.3 + Math.random() * 0.8,
+          alpha: 0.04 + Math.random() * 0.08 * pulse,
+          drift: (Math.random() - 0.5) * 0.4,
+        });
+      }
     }
 
     if (spVibeEngineState.particles) {
-      spVibeEngineState.particles = spVibeEngineState.particles.filter(p => p.alpha > 0.01);
+      spVibeEngineState.particles = spVibeEngineState.particles.filter(p => p.alpha > 0.005);
       spVibeEngineState.particles.forEach(p => {
         p.y    -= p.speed;
         p.x    += p.drift;
-        p.alpha *= 0.993;
+        p.alpha *= 0.994;
         ctx2d.beginPath();
         ctx2d.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         ctx2d.fillStyle = `rgba(${r},${g},${b},${p.alpha.toFixed(3)})`;
@@ -991,9 +970,11 @@ function updateHeaderWidget(info) {
   }
 
   const playIcon = info.isPlaying ? '⏸' : '▶';
+  // FIX #3: art + track info clickable → go to Focus tab
   spSection.innerHTML = `
-    <img class="hdr-art" src="${escH(info.albumArt)}" alt="art" onerror="this.style.opacity='.3'">
-    <div class="hdr-track-info">
+    <img class="hdr-art" src="${escH(info.albumArt)}" alt="art" onerror="this.style.opacity='.3'"
+      onclick="showTab('focus')" style="cursor:pointer" title="Open Focus tab">
+    <div class="hdr-track-info" onclick="showTab('focus')" style="cursor:pointer" title="Open Focus tab">
       <div class="hdr-track-name">${escH(info.trackName)}</div>
       <div class="hdr-artist-name">${escH(info.artistName)}</div>
     </div>
@@ -1100,6 +1081,7 @@ function spToggleAddMode() {
   spAddMode = !spAddMode;
   document.querySelectorAll('.sp-save-btn').forEach(btn => {
     btn.classList.toggle('active', spAddMode);
+    btn.innerHTML = svgAddToPlaylist(spAddMode) + ' + Playlist';
   });
   const panel  = document.getElementById('sp-playlists-list');
   const banner = document.getElementById('sp-add-banner');
@@ -1120,7 +1102,6 @@ function spToggleAddMode() {
         spToggleAddMode();
       };
     });
-    // Switch to playlists view
     setFocusRight('playlists');
   } else {
     if (banner) banner.remove();

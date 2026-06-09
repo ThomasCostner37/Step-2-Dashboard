@@ -778,6 +778,16 @@ select.input { cursor: pointer; }
     .sp-icon-btn:hover { color:var(--text-primary); background:var(--bg-elevated); transform:scale(1.12); }
     .sp-icon-btn.active { color:#1DB954; }
     .sp-icon-btn.active:hover { color:#1ed760; }
+    .sp-text-btn {
+      background:var(--bg-elevated); border:1px solid var(--border); border-radius:999px;
+      cursor:pointer; color:var(--text-tertiary); font-family:var(--font-mono);
+      font-size:.62rem; font-weight:500; padding:4px 10px;
+      display:inline-flex; align-items:center; gap:5px;
+      transition:all .15s; white-space:nowrap; flex-shrink:0;
+    }
+    .sp-text-btn:hover { border-color:var(--border-bright); color:var(--text-primary); background:var(--bg-card); }
+    .sp-text-btn.active { color:var(--accent-text); border-color:rgba(176,120,48,.45); background:var(--accent-glow); }
+    .sp-text-btn.active svg { stroke:var(--accent); }
     .sp-connect-btn { width:100%; padding:.65rem; background:#1DB954; color:#fff; border:none;
                       border-radius:var(--r-md); font-family:var(--font-mono); font-size:.78rem;
                       font-weight:600; cursor:pointer; transition:background .15s; }
