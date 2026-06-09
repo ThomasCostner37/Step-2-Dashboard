@@ -384,7 +384,7 @@ async function playSpotifyPlaylist(uri, name) {
 // ── Spotify Auth (PKCE) ───────────────────────────────────
 function spotifyLogin() {
   const verifier = generateCodeVerifier(128);
-  sessionStorage.setItem('sp_verifier', verifier);
+  localStorage.setItem('sp_verifier', verifier);
   generateCodeChallenge(verifier).then(challenge => {
     const params = new URLSearchParams({
       client_id:             SPOTIFY_CLIENT_ID,
@@ -412,7 +412,7 @@ async function generateCodeChallenge(verifier) {
 }
 
 async function exchangeSpotifyCode(code) {
-  const verifier = sessionStorage.getItem('sp_verifier');
+  const verifier = localStorage.getItem('sp_verifier');
   if (!verifier) return;
   const resp = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
@@ -428,9 +428,9 @@ async function exchangeSpotifyCode(code) {
   const data = await resp.json();
   if (data.access_token) {
     spToken = data.access_token;
-    sessionStorage.setItem('sp_token', spToken);
-    if (data.refresh_token) sessionStorage.setItem('sp_refresh', data.refresh_token);
-    sessionStorage.removeItem('sp_verifier');
+    localStorage.setItem('sp_token', spToken);
+    if (data.refresh_token) localStorage.setItem('sp_refresh', data.refresh_token);
+    localStorage.removeItem('sp_verifier');
     window.history.replaceState({}, '', window.location.pathname);
     initSpotifyPlayer();
     startSpotifyPoll();
@@ -439,7 +439,7 @@ async function exchangeSpotifyCode(code) {
 }
 
 async function refreshSpotifyToken() {
-  const refresh = sessionStorage.getItem('sp_refresh');
+  const refresh = localStorage.getItem('sp_refresh');
   if (!refresh) return false;
   const resp = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
@@ -453,7 +453,7 @@ async function refreshSpotifyToken() {
   const data = await resp.json();
   if (data.access_token) {
     spToken = data.access_token;
-    sessionStorage.setItem('sp_token', spToken);
+    localStorage.setItem('sp_token', spToken);
     return true;
   }
   return false;
@@ -468,7 +468,7 @@ function initSpotify() {
     return;
   }
 
-  const saved = sessionStorage.getItem('sp_token');
+  const saved = localStorage.getItem('sp_token');
   if (saved) {
     spToken = saved;
     initSpotifyPlayer();

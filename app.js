@@ -78,8 +78,11 @@ window.onload = function () {
       const msLeft = savedExpiry - Date.now();
       setTimeout(() => tokenClient.requestAccessToken({ prompt:'none' }), Math.max(0, msLeft - 2 * 60 * 1000));
     } else {
-      // Silent sign-in attempt
-      setTimeout(() => tokenClient.requestAccessToken({ prompt:'none' }), 100);
+      // No valid saved token — show sign-in screen immediately
+      // (silent prompt:'none' is unreliable without a refresh token and causes blank-screen hangs)
+      localStorage.removeItem('goog_token');
+      localStorage.removeItem('goog_token_exp');
+      document.getElementById('auth-screen').style.display = 'flex';
     }
   });
 };
