@@ -93,6 +93,7 @@ async function showApp() {
   await loadFromDrive();
   normalizeState();
   renderAll();
+  initSpotify(); // run once on load — not inside renderAll
   // Auto-refresh token every 55 min while app is open
   setInterval(() => tokenClient.requestAccessToken({ prompt:'none' }), 55 * 60 * 1000);
   // Init pomodoro header display (needs header widgets injected by renderAll first)
@@ -211,8 +212,24 @@ function normalizeState() {
     }
   });
 
-  const PRIO_ORDER = { high:0, medium:1, low:2, none:3 };
-  state.topics.sort((a,b) => (PRIO_ORDER[a.priority] ?? 3) - (PRIO_ORDER[b.priority] ?? 3));
+  // One-time priority correction — reverts accidental changes to known-correct values
+  const PRIORITY_CORRECTIONS = {
+    'Surgery — Respiratory System': 'medium',
+    'Endo: thyroid disorders':       'high',
+    'Resp: upper airway disorders':  'high',
+    'Gastro: congenital disorders':  'high',
+    'OB: obstetric complications':   'medium',
+    'OB: labor and delivery':        'low',
+    'Multi: fluid/electrolyte disorders': 'low',
+  };
+  let corrected = false;
+  state.topics.forEach(t => {
+    if (PRIORITY_CORRECTIONS[t.name] && t.priority !== PRIORITY_CORRECTIONS[t.name]) {
+      t.priority = PRIORITY_CORRECTIONS[t.name];
+      corrected = true;
+    }
+  });
+  if (corrected) scheduleSave();
 
   if (state.resources.length && typeof state.resources[0] === 'string') {
     state.resources = state.resources.map(r => ({ id:uid(), name:r, group:'', done:false }));
@@ -738,6 +755,7 @@ function rebuildTopicsTab() {
         <button class="topic-filter-btn"        id="topic-filter-open" onclick="setTopicFilterFull('open')">Open</button>
         <button class="topic-filter-btn"        id="topic-filter-done" onclick="setTopicFilterFull('done')">Done</button>
       </div>
+      <button class="btn btn-ghost btn-sm" onclick="sortTopicsByPriority()" title="Sort by priority" style="font-family:var(--font-mono);font-size:.7rem;padding:0 .6rem;height:28px;flex-shrink:0">Sort</button>
     </div>
 
     <div class="topic-list-full" id="topics-list"></div>
@@ -782,7 +800,6 @@ function renderAll() {
   renderMissedSessions();
   renderNotes();
   renderCalendar();
-  initSpotify();
   setInterval(updateCountdown, 60000);
 }
 
@@ -1161,10 +1178,7 @@ function renderTopics() {
 
   const q = (document.getElementById('topic-search-inp') || {}).value?.trim().toLowerCase() || '';
 
-  const PRIO_ORDER = { high:0, medium:1, low:2, none:3 };
-  const all = [...(state.topics || [])].sort((a,b) =>
-    (PRIO_ORDER[a.priority] ?? 3) - (PRIO_ORDER[b.priority] ?? 3)
-  );
+  const all = [...(state.topics || [])];
 
   const shown = all.filter(t => {
     if (topicFullFilter === 'open' && t.done) return false;
@@ -1257,6 +1271,10 @@ function cycleTopicPriority(id) {
   if (!t) return;
   const cycle = { none:'high', high:'medium', medium:'low', low:'none' };
   t.priority = cycle[t.priority || 'none'];
+  renderTopics(); renderWeakSpots(); scheduleSave();
+}
+
+function sortTopicsByPriority() {
   const PRIO_ORDER = { high:0, medium:1, low:2, none:3 };
   state.topics.sort((a,b) => (PRIO_ORDER[a.priority] ?? 3) - (PRIO_ORDER[b.priority] ?? 3));
   renderTopics(); renderWeakSpots(); scheduleSave();

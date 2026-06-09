@@ -304,7 +304,6 @@ async function fetchSpotifyPlaylists() {
     }
 
     const data = await resp.json();
-    if (data.items && data.items[0]) console.log("[Spotify playlists] first item tracks field:", data.items[0].tracks);
 
     if (!data.items?.length) {
       container.innerHTML = '<div class="sp-idle" style="padding:.5rem 0">No playlists found</div>';
@@ -348,6 +347,16 @@ async function fetchSpotifyPlaylists() {
       div.onclick = () => playSpotifyPlaylist(pl.uri, pl.name);
       container.appendChild(div);
     });
+
+    // If add mode was active when playlists reloaded, re-apply add handlers
+    if (spAddMode) {
+      document.querySelectorAll('.sp-playlist-row').forEach(function(row) {
+        row.onclick = function() {
+          spAddToPlaylist(row.dataset.uri || '', row.querySelector('.sp-playlist-name').textContent);
+          spToggleAddMode();
+        };
+      });
+    }
   } catch (e) {
     console.warn('Playlists fetch:', e);
 
@@ -435,6 +444,25 @@ async function exchangeSpotifyCode(code) {
     initSpotifyPlayer();
     startSpotifyPoll();
     setTimeout(fetchSpotifyPlaylists, 1500);
+
+    // Execute any pending add-to-playlist that triggered this re-auth
+    const pending = localStorage.getItem('sp_pending_add');
+    if (pending) {
+      localStorage.removeItem('sp_pending_add');
+      try {
+        const { playlistUri, playlistName, trackUri } = JSON.parse(pending);
+        setTimeout(async () => {
+          const pid = playlistUri.split(':')[2];
+          if (!pid || !trackUri) return;
+          const r = await fetch('https://api.spotify.com/v1/playlists/' + pid + '/tracks', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + spToken, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uris: [trackUri] })
+          });
+          showToast(r.ok ? ('Added to ' + playlistName) : 'Could not add track — try again', 2500);
+        }, 2000);
+      } catch(e) { /* malformed pending, ignore */ }
+    }
   }
 }
 
@@ -837,6 +865,7 @@ function updateShuffleRepeatButtons() {
   if (repeatBtn) {
     repeatBtn.setAttribute('data-state', spRepeatState);
     repeatBtn.textContent = spRepeatState === 'track' ? 'Repeat 1' : spRepeatState === 'context' ? 'Repeat All' : 'Repeat';
+    repeatBtn.classList.toggle('active', spRepeatState !== 'off');
   }
 }
 
@@ -900,21 +929,26 @@ async function spAddToPlaylist(playlistUri, playlistName) {
     body: JSON.stringify({ uris: [spCurrentTrackUri] })
   });
 
-  // 403 = token lacks playlist-modify scope (stale login). Force fresh auth.
-  if (resp.status === 403) {
-    localStorage.removeItem('sp_token');
-    localStorage.removeItem('sp_refresh');
-    spToken = null;
-    showToast('Spotify needs re-login for playlist editing. Reconnecting…', 3000);
-    setTimeout(() => spotifyLogin(), 1800);
+  // 401/403 — try silent token refresh first; only full re-auth if that fails
+  if (resp.status === 401 || resp.status === 403) {
+    const refreshed = await refreshSpotifyToken();
+    if (refreshed) {
+      const retry = await fetch('https://api.spotify.com/v1/playlists/' + playlistId + '/tracks', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + spToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uris: [spCurrentTrackUri] })
+      });
+      showToast(retry.ok ? ('Added to ' + playlistName) : 'Could not add track — try again', 2200);
+      return;
+    }
+    // Refresh failed — genuinely missing scope; save intent and re-auth once
+    localStorage.setItem('sp_pending_add', JSON.stringify({
+      playlistUri, playlistName, trackUri: spCurrentTrackUri
+    }));
+    showToast('Re-authorising Spotify for playlist editing…', 2500);
+    setTimeout(() => spotifyLogin(), 1200);
     return;
   }
 
-  var msg = document.createElement('div');
-  msg.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--accent);' +
-    'color:#fff;font-family:var(--font-mono);font-size:.75rem;padding:.45rem 1rem;border-radius:999px;' +
-    'z-index:2000;pointer-events:none;opacity:1;transition:opacity .4s';
-  msg.textContent = resp.ok ? ('Added to ' + playlistName) : 'Could not add track';
-  document.body.appendChild(msg);
-  setTimeout(function() { msg.style.opacity = '0'; setTimeout(function() { msg.remove(); }, 400); }, 2200);
+  showToast(resp.ok ? ('Added to ' + playlistName) : 'Could not add track — try again', 2200);
 }
