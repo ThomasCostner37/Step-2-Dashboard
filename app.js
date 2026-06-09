@@ -116,14 +116,17 @@ async function showApp() {
   setTimeout(initPomDisplay, 100);
 }
 
-function handleSignIn()  { tokenClient.requestAccessToken({ prompt:'' }); }
-function handleSignOut() {
+window.handleSignIn = function () {
+  tokenClient.requestAccessToken({ prompt: '' });
+};
+
+window.handleSignOut = function () {
   currentToken = null;
   localStorage.removeItem('goog_token');
   localStorage.removeItem('goog_token_exp');
   document.getElementById('app').classList.remove('visible');
   document.getElementById('auth-screen').style.display = 'flex';
-}
+};
 
 // ── Drive Sync ────────────────────────────────────────────
 async function loadFromDrive() {
