@@ -6,8 +6,23 @@ const SCOPES = 'https://www.googleapis.com/auth/documents';
 
 const TOPICS = []; // All topics are user-managed; seeded from data on first load
 
-// ── Default Topic List ────────────────────────────────────
-function pctToPriority(pct) {
+// ── Priority badge helper — used by renderTopics and renderWeakSpots ──
+function prioBadge(prio, size) {
+  const map = {
+    high:   ['HIGH', '#FCEBEB', '#A32D2D', '#F09595'],
+    medium: ['MED',  '#FAEEDA', '#633806', '#EF9F27'],
+    low:    ['LOW',  'var(--bg-elevated)', 'var(--text-tertiary)', 'var(--border)'],
+  };
+  const m = map[prio];
+  if (!m) return '';
+  const [label, bg, color, border] = m;
+  if (size === 'small') {
+    return `<span style="font-family:var(--font-mono);font-size:.5rem;padding:0 4px;border-radius:3px;background:${bg};color:${color};flex-shrink:0">${label[0]}</span>`;
+  }
+  return `<span style="font-family:var(--font-mono);font-size:.55rem;padding:1px 6px;border-radius:10px;background:${bg};color:${color};border:1px solid ${border};flex-shrink:0">${label}</span>`;
+}
+
+
   if (pct <= 60) return 'high';
   if (pct <= 70) return 'medium';
   return 'low';
@@ -31,6 +46,7 @@ let state = {
 };
 
 let tokenClient;
+let currentToken      = null;  // replaces gapi.client token — set on login/restore
 let saveTimer         = null;
 let shelfChart        = null;
 let scoreView         = 'shelf';
@@ -46,40 +62,40 @@ window.onload = function () {
   injectAppRefinements();
   document.addEventListener('keydown', globalKeyDown);
 
-  gapi.load('client', async () => {
-    try {
-      await gapi.client.init({
-        apiKey: typeof API_KEY !== 'undefined' ? API_KEY : '',
-        discoveryDocs: ['https://docs.googleapis.com/$discovery/rest?version=v1']
-      });
-    } catch (e) { console.warn('gapi init:', e); }
+  // Check for a saved valid token immediately — before any network calls.
+  // If found, show the app right away; gapi.load runs in background for token refresh machinery.
+  const savedToken  = localStorage.getItem('goog_token');
+  const savedExpiry = parseInt(localStorage.getItem('goog_token_exp') || '0');
+  const hasValidToken = savedToken && Date.now() < savedExpiry;
 
+  if (hasValidToken) {
+    // Show app instantly — no waiting for gapi or discovery doc
+    currentToken = savedToken;
+    showApp();
+  }
+
+  gapi.load('client', async () => {
+    // Skip discoveryDocs — we use fetch() for Docs API calls directly,
+    // so we don't need gapi.client.init() to fetch the discovery document.
+    // This removes the blocking googleapis.com round-trip on every page load.
     tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
       callback: async (resp) => {
         if (resp.error) { console.log('GIS:', resp.error); return; }
-        const token = resp.access_token;
-        gapi.client.setToken({ access_token: token });
-        // Persist token + expiry so reload is silent
-        localStorage.setItem('goog_token', token);
-        localStorage.setItem('goog_token_exp', Date.now() + 55 * 60 * 1000); // 55 min
-        showApp();
+        currentToken = resp.access_token;
+        localStorage.setItem('goog_token', currentToken);
+        localStorage.setItem('goog_token_exp', Date.now() + 55 * 60 * 1000);
+        if (!hasValidToken) showApp(); // only call showApp if we didn't already
       }
     });
 
-    // Try restoring saved token first
-    const savedToken  = localStorage.getItem('goog_token');
-    const savedExpiry = parseInt(localStorage.getItem('goog_token_exp') || '0');
-    if (savedToken && Date.now() < savedExpiry) {
-      gapi.client.setToken({ access_token: savedToken });
-      showApp();
+    if (hasValidToken) {
       // Schedule silent refresh before expiry
       const msLeft = savedExpiry - Date.now();
       setTimeout(() => tokenClient.requestAccessToken({ prompt:'none' }), Math.max(0, msLeft - 2 * 60 * 1000));
     } else {
-      // No valid saved token — show sign-in screen immediately
-      // (silent prompt:'none' is unreliable without a refresh token and causes blank-screen hangs)
+      // No valid saved token — show sign-in screen
       localStorage.removeItem('goog_token');
       localStorage.removeItem('goog_token_exp');
       document.getElementById('auth-screen').style.display = 'flex';
@@ -102,7 +118,7 @@ async function showApp() {
 
 function handleSignIn()  { tokenClient.requestAccessToken({ prompt:'' }); }
 function handleSignOut() {
-  gapi.client.setToken(null);
+  currentToken = null;
   localStorage.removeItem('goog_token');
   localStorage.removeItem('goog_token_exp');
   document.getElementById('app').classList.remove('visible');
@@ -111,10 +127,16 @@ function handleSignOut() {
 
 // ── Drive Sync ────────────────────────────────────────────
 async function loadFromDrive() {
+  if (!currentToken) return;
   try {
-    const doc = await gapi.client.docs.documents.get({ documentId: DOC_ID });
+    const resp = await fetch(
+      `https://docs.googleapis.com/v1/documents/${DOC_ID}`,
+      { headers: { Authorization: `Bearer ${currentToken}` } }
+    );
+    if (!resp.ok) { console.warn('Load error:', resp.status); return; }
+    const doc = await resp.json();
     let text = '';
-    for (const el of (doc.result.body.content || [])) {
+    for (const el of (doc.body.content || [])) {
       if (el.paragraph)
         for (const run of (el.paragraph.elements || []))
           if (run.textRun) text += run.textRun.content;
@@ -131,19 +153,36 @@ function scheduleSave() {
 }
 
 async function saveToDrive() {
-  if (!gapi.client.getToken()) return;
+  if (!currentToken) return;
   try {
-    const doc = await gapi.client.docs.documents.get({ documentId: DOC_ID });
-    const lastIndex = doc.result.body.content.reduce(
+    // 1. GET current doc to find last index
+    const getResp = await fetch(
+      `https://docs.googleapis.com/v1/documents/${DOC_ID}`,
+      { headers: { Authorization: `Bearer ${currentToken}` } }
+    );
+    if (!getResp.ok) { setSaveDot('error'); return; }
+    const doc = await getResp.json();
+    const lastIndex = (doc.body.content || []).reduce(
       (m, el) => el.endIndex ? Math.max(m, el.endIndex) : m, 1);
+
+    // 2. batchUpdate: delete existing content + insert new
     const requests = [];
     if (lastIndex > 1)
-      requests.push({ deleteContentRange:{ range:{ startIndex:1, endIndex:lastIndex-1 }}});
-    requests.push({ insertText:{ location:{ index:1 }, text: JSON.stringify(state) }});
-    await gapi.client.docs.documents.batchUpdate({ documentId:DOC_ID, resource:{ requests }});
+      requests.push({ deleteContentRange: { range: { startIndex: 1, endIndex: lastIndex - 1 } } });
+    requests.push({ insertText: { location: { index: 1 }, text: JSON.stringify(state) } });
+
+    const saveResp = await fetch(
+      `https://docs.googleapis.com/v1/documents/${DOC_ID}:batchUpdate`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests })
+      }
+    );
+    if (!saveResp.ok) { setSaveDot('error'); return; }
     setSaveDot('saved');
     const lbl = document.getElementById('save-lbl');
-    if (lbl) lbl.textContent = 'Saved ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    if (lbl) lbl.textContent = 'Saved ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   } catch(e) { console.error('Save error:', e); setSaveDot('error'); }
 }
 
@@ -177,25 +216,6 @@ function normalizeState() {
     state.topics = Object.keys(obj).map(name => ({ id:uid(), name, done: !!obj[name] }));
   }
 
-  if (state.topicNotes && typeof state.topicNotes === 'object') {
-    state.topics.forEach(t => {
-      if (!t.note && state.topicNotes[t.name]) t.note = state.topicNotes[t.name];
-    });
-    delete state.topicNotes;
-  }
-
-  const oldBaseNames = [
-    'OB complications + labor/delivery',
-    'Female reproductive: menstrual/endocrine, infections, breast, Pap/HPV',
-    'Thyroid disorders','Pediatric developmental/behavioral disorders',
-    'Pediatric congenital GI','Respiratory: upper airway + obstructive disease',
-    'GI: inflammatory/bacterial/small bowel-colon','Biostatistics/test characteristics',
-    'Cardiology: endocarditis, congenital, PAD, ACS/HF basics',
-    'Fluids/electrolytes cleanup','Anemia/transfusion cleanup','Ethics/QI light maintenance',
-    'ob','frepro','resp','cardio','endo','multi','blood','cns','gi','beh','bio','msk'
-  ];
-  state.topics = state.topics.filter(t => !oldBaseNames.includes(t.name));
-
   if (!state.topics.length && !state.archivedTopics.length) {
     state.topics = DEFAULT_TOPICS.map(t => ({
       id: uid(), name: t.name, done: false,
@@ -211,25 +231,6 @@ function normalizeState() {
       else if (!t.priority) t.priority = 'none';
     }
   });
-
-  // One-time priority correction — reverts accidental changes to known-correct values
-  const PRIORITY_CORRECTIONS = {
-    'Surgery — Respiratory System': 'medium',
-    'Endo: thyroid disorders':       'high',
-    'Resp: upper airway disorders':  'high',
-    'Gastro: congenital disorders':  'high',
-    'OB: obstetric complications':   'medium',
-    'OB: labor and delivery':        'low',
-    'Multi: fluid/electrolyte disorders': 'low',
-  };
-  let corrected = false;
-  state.topics.forEach(t => {
-    if (PRIORITY_CORRECTIONS[t.name] && t.priority !== PRIORITY_CORRECTIONS[t.name]) {
-      t.priority = PRIORITY_CORRECTIONS[t.name];
-      corrected = true;
-    }
-  });
-  if (corrected) scheduleSave();
 
   if (state.resources.length && typeof state.resources[0] === 'string') {
     state.resources = state.resources.map(r => ({ id:uid(), name:r, group:'', done:false }));
@@ -259,528 +260,12 @@ function normalizeState() {
 
 // ── Runtime UI Injection ──────────────────────────────────
 function injectAppRefinements() {
-  injectStyles();
   injectSpotifyTab();
-  rebuildDashboardShell();
-  rebuildTopicsTab();
   injectAdvisor();
 }
 
-function injectStyles() {
-  const s = document.createElement('style');
-  s.textContent = `
-    /* ── DASHBOARD 2x2 ── */
-    .dash-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; }
-    .dash-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.05rem 1.2rem; min-width:0; }
-    .dash-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:.7rem; }
-    .dash-title { font-family:var(--font-display); font-size:.95rem; font-weight:700; color:var(--text-primary); }
-    .dash-meta  { font-family:var(--font-mono); font-size:.6rem; color:var(--text-tertiary); }
-
-    .cd-big  { font-family:var(--font-display); font-size:2.6rem; font-weight:800; color:var(--accent); line-height:1; }
-    .cd-sub  { font-family:var(--font-mono); font-size:.62rem; color:var(--text-tertiary); margin-top:.2rem; margin-bottom:.9rem; }
-    .exam-row { display:flex; align-items:center; justify-content:space-between; padding:.38rem 0;
-                border-bottom:1px solid var(--border); }
-    .exam-row:last-of-type { border-bottom:none; }
-    .exam-name { font-family:var(--font-mono); font-size:.75rem; color:var(--text-primary);
-                 overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:60%; }
-    .exam-date { font-family:var(--font-mono); font-size:.65rem; color:var(--text-tertiary); white-space:nowrap; }
-    .exam-empty { font-family:var(--font-mono); font-size:.72rem; color:var(--text-tertiary); padding:.3rem 0; }
-
-    .focus-empty { font-family:var(--font-mono); font-size:.72rem; color:var(--text-tertiary); padding:.3rem 0; }
-    .focus-add   { display:grid; grid-template-columns:1fr auto; gap:8px; margin-top:.7rem; }
-    .focus-textarea { min-height:36px; max-height:90px; resize:vertical; line-height:1.35; }
-
-    .chart-toggle { display:flex; gap:4px; }
-    .chart-tog { font-family:var(--font-mono); font-size:.62rem; padding:3px 8px;
-                 border-radius:var(--r-sm); border:1px solid var(--border);
-                 color:var(--text-tertiary); background:transparent; cursor:pointer; }
-    .chart-tog.active { color:var(--accent-text); border-color:rgba(176,120,48,.35); background:var(--accent-glow); }
-    .score-mini-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:.65rem; }
-    .score-mini { border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-subtle); padding:.4rem .5rem; }
-    .score-mini-num { font-family:var(--font-display); font-weight:800; font-size:1rem; color:var(--accent); line-height:1; }
-    .score-mini-lbl { font-family:var(--font-mono); font-size:.52rem; color:var(--text-tertiary); margin-top:.15rem; }
-
-    .mini-progress-line { height:4px; background:var(--bg-elevated); border-radius:999px; overflow:hidden; margin:.1rem 0 .5rem; }
-    .mini-progress-fill { height:100%; background:var(--accent); width:0%; transition:width .35s; }
-    .ws-filter-row { display:flex; gap:3px; margin-bottom:.5rem; }
-    .ws-filter-btn { font-family:var(--font-mono); font-size:.62rem; padding:3px 7px;
-                     border-radius:var(--r-sm); border:1px solid var(--border);
-                     color:var(--text-tertiary); background:transparent; cursor:pointer; }
-    .ws-filter-btn.active { color:var(--accent-text); border-color:rgba(176,120,48,.35); background:var(--accent-glow); }
-    .ws-list { display:flex; flex-direction:column; gap:3px; max-height:200px; overflow-y:auto; }
-    .ws-row  { display:flex; align-items:center; gap:7px; padding:.38rem .55rem;
-               border-radius:var(--r-sm); border:1px solid transparent; cursor:pointer; transition:all .15s; min-width:0; }
-    .ws-row:hover { background:var(--bg-elevated); border-color:var(--border); }
-    .ws-row.done  { opacity:.52; }
-    .ws-row.done .ws-name { text-decoration:line-through; color:var(--text-tertiary); }
-    .ws-check { width:14px; height:14px; border-radius:3px; border:1px solid var(--border-bright);
-                display:flex; align-items:center; justify-content:center; font-size:8px; flex-shrink:0; }
-    .ws-row.done .ws-check { background:var(--success-bg); border-color:var(--success); color:var(--success); }
-    .ws-name { font-family:var(--font-mono); font-size:.7rem; color:var(--text-primary);
-               flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .ws-del  { background:transparent; border:none; color:transparent; font-size:.8rem; cursor:pointer; padding:0 2px; flex-shrink:0; }
-    .ws-row:hover .ws-del { color:var(--text-tertiary); }
-    .ws-del:hover { color:var(--urgent) !important; }
-    .ws-add  { display:grid; grid-template-columns:1fr auto; gap:7px; margin-top:.65rem; }
-
-    .topic-toolbar { display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
-    .topic-toolbar .input { flex:1; min-width:140px; }
-    .topic-filter-group { display:flex; gap:3px; }
-    .topic-filter-btn { font-family:var(--font-mono); font-size:.62rem; padding:3px 7px;
-                        border-radius:var(--r-sm); border:1px solid var(--border);
-                        color:var(--text-tertiary); background:transparent; cursor:pointer; }
-    .topic-filter-btn.active { color:var(--accent-text); border-color:rgba(176,120,48,.35); background:var(--accent-glow); }
-    .topic-list-full { display:flex; flex-direction:column; gap:4px; margin-bottom:10px; }
-    .topic-row-full { display:flex; align-items:center; gap:10px; padding:.58rem .85rem;
-                      border:1px solid var(--border); background:var(--bg-card);
-                      border-radius:var(--r-md); cursor:default; user-select:none; }
-    .topic-row-full:hover { border-color:var(--border-bright); }
-    .topic-row-full.done { opacity:.58; }
-    .topic-row-full.done .topic-name-full { text-decoration:line-through; color:var(--text-tertiary); }
-    .topic-drag-handle { color:var(--text-tertiary); font-size:.75rem; cursor:grab; padding:0 2px; flex-shrink:0; }
-    .topic-drag-handle:active { cursor:grabbing; }
-    .topic-row-full.drag-over { border-color:var(--accent); background:var(--accent-glow); }
-    .topic-name-full { font-family:var(--font-mono); font-size:.8rem; color:var(--text-primary); flex:1; }
-    .topic-arch-btn { background:transparent; border:1px solid var(--border); color:var(--text-tertiary);
-                      border-radius:4px; padding:2px 7px; font-family:var(--font-mono);
-                      font-size:.58rem; cursor:pointer; flex-shrink:0; }
-    .topic-arch-btn:hover { color:var(--accent-text); border-color:rgba(176,120,48,.35); background:var(--accent-glow); }
-    .topic-add-row { display:grid; grid-template-columns:1fr auto; gap:8px; }
-
-    .resource-item-full { display:flex; align-items:center; gap:8px; padding:.5rem .85rem;
-                           background:var(--bg-card); border:1px solid var(--border);
-                           border-radius:var(--r-sm); user-select:none; }
-    .resource-item-full:hover { border-color:var(--border-bright); }
-    .resource-item-full.drag-over { border-color:var(--accent); background:var(--accent-glow); }
-    .res-drag { color:var(--text-tertiary); font-size:.75rem; cursor:grab; padding:0 2px; flex-shrink:0; }
-    .res-drag:active { cursor:grabbing; }
-    .res-check { width:15px; height:15px; border-radius:3px; border:1px solid var(--border-bright);
-                 display:flex; align-items:center; justify-content:center; font-size:8px; flex-shrink:0; cursor:pointer; }
-    .res-done .res-check { background:var(--success-bg); border-color:var(--success); color:var(--success); }
-    .res-done .res-name   { text-decoration:line-through; color:var(--text-tertiary); }
-    .res-group-tag { font-family:var(--font-mono); font-size:.58rem; color:var(--accent-text);
-                     background:var(--accent-glow); border:1px solid rgba(176,120,48,.2);
-                     border-radius:3px; padding:1px 5px; flex-shrink:0; }
-    .res-name { flex:1; font-size:.85rem; color:var(--text-secondary); }
-    .res-arch-btn { background:transparent; border:1px solid var(--border); color:var(--text-tertiary);
-                    border-radius:4px; padding:2px 7px; font-family:var(--font-mono);
-                    font-size:.58rem; cursor:pointer; flex-shrink:0; }
-    .res-arch-btn:hover { color:var(--accent-text); border-color:rgba(176,120,48,.35); background:var(--accent-glow); }
-    .add-res-row { display:flex; gap:8px; margin-top:8px; }
-
-    .inline-entry-form { background:var(--bg-subtle); border:1px solid var(--border);
-                         border-radius:var(--r-md); padding:1rem 1.1rem; margin:.5rem 1.1rem 1rem;
-                         display:flex; flex-direction:column; gap:8px; }
-    .ief-row  { display:flex; gap:8px; }
-    .ief-stack { display:flex; flex-direction:column; gap:3px; }
-    .ief-label { font-family:var(--font-mono); font-size:.6rem; letter-spacing:.08em;
-                 text-transform:uppercase; color:var(--text-tertiary); }
-    .ief-ta   { min-height:58px; resize:vertical; }
-    .ief-acts { display:flex; gap:8px; justify-content:flex-end; margin-top:4px; }
 
 
-    .pe-row { display:flex; align-items:center; justify-content:space-between; gap:8px;
-              padding:.45rem 0; border-bottom:1px solid var(--border); }
-    .pe-row:last-of-type { border-bottom:none; }
-    .pe-drag { color:var(--text-tertiary); font-size:.75rem; cursor:grab; padding:0 4px; }
-    .pe-name  { font-family:var(--font-mono); font-size:.78rem; color:var(--text-primary); flex:1; }
-    .pe-date  { font-family:var(--font-mono); font-size:.65rem; color:var(--text-tertiary); }
-    .pe-del   { background:transparent; border:none; color:var(--text-tertiary); cursor:pointer; font-size:.85rem; padding:0 3px; }
-    .pe-del:hover { color:var(--urgent); }
-    .pe-add   { display:grid; grid-template-columns:1fr auto auto; gap:8px; margin-top:10px; }
-
-    @media (max-width:700px) {
-      .dash-grid { grid-template-columns:1fr; }
-    }
-    .btn-xs.active { color:var(--accent-text); border-color:rgba(176,120,48,.35); background:var(--accent-glow); }
-    .epc-rot-btn.active { color:var(--accent-text) !important; border-color:rgba(176,120,48,.35) !important; background:var(--accent-glow) !important; }
-
-    /* ── HEADER SPOTIFY + POMODORO ── */
-    /* Spotify section */
-    .hdr-sp-section {
-      display:flex; align-items:center; gap:8px;
-      padding:5px 10px; background:var(--bg-elevated);
-      border:1px solid var(--border); border-radius:var(--r-md);
-      height:38px; min-width:240px; max-width:320px;
-    }
-    .hdr-art { width:26px; height:26px; border-radius:3px; object-fit:cover; flex-shrink:0; background:var(--bg-elevated); }
-    .hdr-track-info { flex:1; min-width:0; }
-    .hdr-track-name { font-family:var(--font-mono); font-size:.65rem; color:var(--text-primary);
-                      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .hdr-artist-name { font-family:var(--font-mono); font-size:.56rem; color:var(--text-tertiary);
-                       white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .hdr-sp-dot { width:5px; height:5px; border-radius:50%; background:#1DB954; flex-shrink:0; }
-    .hdr-sp-controls { display:flex; gap:2px; align-items:center; flex-shrink:0; }
-    .hdr-sp-btn { background:transparent; border:none; color:var(--text-tertiary); cursor:pointer;
-                  font-size:.78rem; padding:3px 5px; border-radius:3px; transition:all .12s; line-height:1; }
-    .hdr-sp-btn:hover { color:var(--text-primary); background:var(--bg-card); }
-    .hdr-sp-btn.play { color:var(--accent-text); }
-    .hdr-sp-connect { font-family:var(--font-mono); font-size:.62rem; padding:5px 10px;
-                      background:#1DB954; color:#fff; border:none; border-radius:var(--r-sm);
-                      cursor:pointer; white-space:nowrap; transition:background .15s; }
-    .hdr-sp-connect:hover { background:#1ed760; }
-
-    /* Pomodoro section */
-    .hdr-pom-section {
-      display:flex; align-items:center; gap:8px;
-      padding:5px 10px; background:var(--bg-elevated);
-      border:1px solid var(--border); border-radius:var(--r-md);
-      height:38px;
-    }
-    .hdr-pom-inner { text-align:center; min-width:52px; }
-    .hdr-pom-time { font-family:var(--font-mono); font-size:.82rem; font-weight:600;
-                    color:var(--accent); line-height:1; }
-    .hdr-pom-phase { font-family:var(--font-mono); font-size:.52rem; text-transform:uppercase;
-                     letter-spacing:.06em; color:var(--text-tertiary); margin-top:1px; }
-    .hdr-pom-phase.break { color:#2E7D32; }
-    .hdr-pom-btns { display:flex; gap:2px; }
-    .hdr-pom-btn { background:transparent; border:none; color:var(--text-tertiary); cursor:pointer;
-                   font-size:.82rem; padding:3px 5px; border-radius:3px; transition:all .12s; line-height:1; }
-    .hdr-pom-btn:hover { color:var(--text-primary); background:var(--bg-card); }
-
-    /* Pomodoro edit popover */
-    .pom-edit-pop {
-      position:fixed; z-index:200;
-      background:var(--bg-card); border:1px solid var(--border-bright);
-      border-radius:var(--r-lg); padding:.85rem 1rem;
-      box-shadow:0 8px 24px rgba(0,0,0,.12);
-    }
-    .pom-set-label { font-family:var(--font-mono); font-size:.58rem; text-transform:uppercase;
-                     letter-spacing:.08em; color:var(--text-tertiary); margin-bottom:3px; }
-
-    /* Legacy sp- classes kept for SDK compat */
-    .sp-dot { width:6px; height:6px; border-radius:50%; background:#1DB954; flex-shrink:0; }
-
-    /* Focus tab layout */
-    .focus-tab-grid {
-  display:grid;
-  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  gap:18px;
-  align-items:stretch;
-}
-
-.focus-tab-grid > * {
-  min-width:0;
-}
-
-.sp-card,
-.pom-card {
-  min-width:0;
-}
-    @media (max-width:700px) {
-  .focus-tab-grid {
-    grid-template-columns:1fr;
-  }
-}
-
-.sp-playlist-row {
-  display:flex;
-  align-items:center;
-  gap:10px;
-  padding:.45rem .5rem;
-  border-radius:var(--r-sm);
-  cursor:pointer;
-  transition:background .12s;
-  border:1px solid transparent;
-  min-width:0;
-}
-
-.sp-playlist-meta {
-  min-width:0;
-  flex:1;
-}
-
-.sp-playlist-name {
-  font-family:var(--font-mono);
-  font-size:.75rem;
-  color:var(--text-primary);
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-.sp-playlist-count {
-  font-family:var(--font-mono);
-  font-size:.6rem;
-  color:var(--text-tertiary);
-}
-
-.sp-playlist-play {
-  margin-left:auto;
-  font-size:.9rem;
-  color:var(--text-tertiary);
-  flex-shrink:0;
-}
-
-    /* Now Playing card */
-    .sp-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.25rem; overflow:hidden;
-               display:flex; flex-direction:column; }
-    .sp-art-lg { width:100%; aspect-ratio:1; border-radius:var(--r-md); object-fit:cover;
-                 background:var(--bg-elevated); margin-bottom:1rem; display:block;
-                 min-height:0; flex-shrink:1; max-height:320px; }
-    .sp-track-lg { font-family:var(--font-display); font-size:1.1rem; font-weight:700;
-                   color:var(--text-primary); margin-bottom:.2rem; line-height:1.3; }
-    .sp-artist-lg { font-family:var(--font-mono); font-size:.75rem; color:var(--text-tertiary); margin-bottom:.85rem; }
-    .sp-progress-wrap { height:3px; background:var(--bg-elevated); border-radius:999px; margin-bottom:.5rem; overflow:hidden; }
-    /* NOTE: no CSS transition on progress bar — interpolator drives it smoothly at 1s intervals */
-    .sp-progress-bar  { height:100%; background:#1DB954; border-radius:999px; }
-    .sp-time-row { display:flex; justify-content:space-between; font-family:var(--font-mono);
-                   font-size:.58rem; color:var(--text-tertiary); margin-bottom:1rem; }
-    .sp-controls { display:flex; align-items:center; justify-content:center; gap:16px; }
-    .sp-ctrl-btn { background:transparent; border:none; cursor:pointer; color:var(--text-secondary);
-                   font-size:1.2rem; transition:all .15s; padding:4px; border-radius:50%; }
-    .sp-ctrl-btn:hover { color:var(--text-primary); transform:scale(1.1); }
-    .sp-ctrl-btn.play { width:44px; height:44px; background:#1DB954; color:#fff; border-radius:50%;
-                        font-size:1rem; display:flex; align-items:center; justify-content:center; }
-    .sp-ctrl-btn.play:hover { background:#1ed760; transform:scale(1.05); }
-    .sp-pill-btn {
-      font-family:var(--font-mono); font-size:.68rem; font-weight:500;
-      padding:0 .75rem; height:28px; line-height:28px;
-      border:1px solid var(--border); border-radius:999px;
-      background:var(--bg-elevated); color:var(--text-secondary);
-      cursor:pointer; transition:all .15s; white-space:nowrap;
-      display:inline-flex; align-items:center; justify-content:center;
-    }
-    .sp-pill-btn:hover { border-color:var(--border-bright); color:var(--text-primary); background:var(--bg-card); }
-    .sp-pill-btn.active { color:var(--accent-text); border-color:rgba(176,120,48,.45); background:var(--accent-glow); }
-    .sp-shuffle-btn.active, .sp-repeat-btn[data-state="context"],
-    .sp-repeat-btn[data-state="track"] { color:var(--accent-text) !important; border-color:rgba(176,120,48,.45) !important; background:var(--accent-glow) !important; }
-    .sp-connect-btn { width:100%; padding:.65rem; background:#1DB954; color:#fff; border:none;
-                      border-radius:var(--r-md); font-family:var(--font-mono); font-size:.78rem;
-                      font-weight:600; cursor:pointer; transition:background .15s; }
-    .sp-connect-btn:hover { background:#1ed760; }
-    .sp-idle { font-family:var(--font-mono); font-size:.75rem; color:var(--text-tertiary);
-               text-align:center; padding:2rem 1rem; }
-
-    /* Pomodoro + moods card */
-    .pom-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.25rem; display:flex; flex-direction:column; overflow:hidden; }
-    .pom-display { text-align:center; margin:.75rem 0 1rem; }
-    .pom-time { font-family:var(--font-display); font-size:3.5rem; font-weight:800;
-                color:var(--accent); line-height:1; letter-spacing:-.03em; }
-    .pom-phase { font-family:var(--font-mono); font-size:.65rem; text-transform:uppercase;
-                 letter-spacing:.1em; color:var(--text-tertiary); margin-top:.3rem; }
-    .pom-phase.break { color:#2E7D32; }
-    .pom-settings { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:.85rem; }
-    .pom-set-label { font-family:var(--font-mono); font-size:.58rem; text-transform:uppercase;
-                     letter-spacing:.08em; color:var(--text-tertiary); margin-bottom:3px; }
-    .pom-controls { display:flex; gap:8px; justify-content:center; margin-bottom:1.1rem; }
-    .pom-btn { font-family:var(--font-mono); font-size:.72rem; padding:.45rem 1.1rem;
-               border-radius:var(--r-sm); border:1px solid var(--border);
-               background:transparent; color:var(--text-secondary); cursor:pointer; transition:all .15s; }
-    .pom-btn:hover { border-color:var(--border-bright); color:var(--text-primary); }
-    .pom-btn.primary { background:var(--accent-glow); border-color:rgba(176,120,48,.3); color:var(--accent-text); }
-    .pom-btn.primary:hover { background:rgba(176,120,48,.18); border-color:var(--accent); }
-    .pom-btn.danger { background:rgba(184,58,32,.08); border-color:rgba(184,58,32,.2); color:#B83A20; }
-
-    /* Quote nav ghost buttons */
-    #focus-quotes-panel:hover .quote-nav-btns { opacity:1 !important; }
-
-    .mood-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
-    .mood-btn { font-family:var(--font-mono); font-size:.65rem; padding:.5rem .3rem;
-                border-radius:var(--r-sm); border:1px solid var(--border);
-                background:var(--bg-subtle); color:var(--text-secondary);
-                cursor:pointer; transition:all .15s; text-align:center; line-height:1.4; }
-    .mood-btn:hover { border-color:var(--border-bright); background:var(--bg-elevated); color:var(--text-primary); }
-
-    /* ── CALENDAR ── */
-    .cal-card { padding-bottom:1.2rem; }
-    .cal-dow-row { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; margin-bottom:4px; }
-    .cal-dow { font-family:var(--font-mono); font-size:.6rem; text-align:center; color:var(--text-tertiary);
-               text-transform:uppercase; letter-spacing:.06em; padding:.3rem 0; }
-    .cal-weeks { display:flex; flex-direction:column; gap:2px; }
-    .cal-week  { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
-    .cal-day   { min-height:74px; border:1px solid var(--border); border-radius:var(--r-sm);
-                 background:var(--bg-card); padding:4px 5px; cursor:pointer;
-                 transition:border-color .12s; position:relative; overflow:hidden; }
-    .cal-day:hover { border-color:var(--border-bright); background:var(--bg-subtle); }
-    .cal-day.other-month { background:var(--bg-base); }
-    .cal-day.other-month .cal-day-num { color:var(--text-tertiary); opacity:.45; }
-    .cal-day.is-today { border-color:var(--accent); }
-    .cal-day.is-today .cal-day-num { color:var(--accent); font-weight:700; }
-    .cal-day-num { font-family:var(--font-mono); font-size:.68rem; color:var(--text-secondary);
-                   line-height:1; margin-bottom:3px; }
-    .cal-events { display:flex; flex-direction:column; gap:2px; }
-    .cal-evt { font-family:var(--font-mono); font-size:.58rem; padding:1px 5px;
-               border-radius:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-               cursor:pointer; transition:opacity .12s; line-height:1.5; }
-    .cal-evt:hover { opacity:.8; }
-    .cal-evt-more { font-family:var(--font-mono); font-size:.55rem; color:var(--text-tertiary);
-                    padding:1px 3px; cursor:pointer; }
-    .cal-evt-cont-left  { border-radius:0 3px 3px 0; margin-left:-5px; padding-left:3px; }
-    .cal-evt-cont-right { border-radius:3px 0 0 3px; margin-right:-5px; padding-right:3px; }
-    .cal-evt-cont-mid   { border-radius:0; margin-left:-5px; margin-right:-5px; padding-left:3px; padding-right:3px; }
-
-    /* Event type colors */
-    .cal-type-exam     { background:#FCEBEB; color:#A32D2D; border-left:2px solid #E24B4A; }
-    .cal-type-study    { background:var(--accent-glow); color:var(--accent-text); border-left:2px solid var(--accent); }
-    .cal-type-personal { background:#EEE6F8; color:#6B3FA0; border-left:2px solid #9B6DD6; }
-    .cal-type-rotation { background:#E3F2E8; color:#2A6B3A; border-left:2px solid #4CAF6B; }
-    .cal-type-exam.locked { opacity:.75; cursor:default; }
-
-    /* Calendar event popover */
-    .cal-popover { position:fixed; z-index:150; background:var(--bg-card);
-                   border:1px solid var(--border-bright); border-radius:var(--r-lg);
-                   box-shadow:0 8px 28px rgba(0,0,0,.14); padding:1rem 1.1rem;
-                   width:280px; }
-    .cal-pop-title { font-family:var(--font-display); font-size:.95rem; font-weight:700;
-                     color:var(--text-primary); margin-bottom:.75rem; }
-    .cal-pop-row { display:flex; flex-direction:column; gap:3px; margin-bottom:.6rem; }
-    .cal-pop-label { font-family:var(--font-mono); font-size:.58rem; text-transform:uppercase;
-                     letter-spacing:.08em; color:var(--text-tertiary); }
-    .cal-type-btns { display:flex; gap:4px; flex-wrap:wrap; margin-top:3px; }
-    .cal-type-btn { font-family:var(--font-mono); font-size:.62rem; padding:3px 9px;
-                    border-radius:3px; border:1px solid var(--border); background:transparent;
-                    color:var(--text-tertiary); cursor:pointer; transition:all .12s; }
-    .cal-type-btn.active { font-weight:600; }
-    .cal-type-btn.exam     { border-color:#E24B4A; }
-    .cal-type-btn.exam.active     { background:#FCEBEB; color:#A32D2D; }
-    .cal-type-btn.study    { border-color:var(--accent); }
-    .cal-type-btn.study.active    { background:var(--accent-glow); color:var(--accent-text); }
-    .cal-type-btn.personal { border-color:#9B6DD6; }
-    .cal-type-btn.personal.active { background:#EEE6F8; color:#6B3FA0; }
-    .cal-type-btn.rotation { border-color:#4CAF6B; }
-    .cal-type-btn.rotation.active { background:#E3F2E8; color:#2A6B3A; }
-    .cal-pop-acts { display:flex; gap:8px; justify-content:flex-end; margin-top:.75rem; }
-  `;
-  document.head.appendChild(s);
-}
-
-function rebuildDashboardShell() {
-  const dash = document.getElementById('tab-dashboard');
-  if (!dash) return;
-  dash.innerHTML = `
-    <div class="dash-grid">
-      <div class="dash-card">
-        <div class="dash-head">
-          <div>
-            <div class="dash-title">Step 2 CK</div>
-            <div class="dash-meta">Aug 12, 2026</div>
-          </div>
-          <button class="btn btn-ghost btn-xs" onclick="openPracticeExamModal()">Change</button>
-        </div>
-        <div class="cd-big" id="step-days">–</div>
-        <div class="cd-sub">days remaining</div>
-        <div id="practice-exam-list"></div>
-      </div>
-
-      <div class="dash-card">
-        <div class="dash-head">
-          <div class="dash-title">Today's Focus</div>
-          <div class="dash-meta" id="focus-date-lbl"></div>
-        </div>
-        <div id="focus-items"></div>
-        <div class="focus-add">
-          <textarea class="input focus-textarea" id="focus-text-inp"
-            placeholder="Type a focus item…"
-            onkeydown="if((event.metaKey||event.ctrlKey)&&event.key==='Enter')addFocusTopic()"></textarea>
-          <button class="btn btn-primary btn-sm" onclick="addFocusTopic()">Add</button>
-        </div>
-      </div>
-
-      <div class="dash-card">
-        <div class="dash-head">
-          <div class="dash-title">Score Trajectory</div>
-          <div class="chart-toggle">
-            <button class="chart-tog active" id="tog-shelf" onclick="setScoreView('shelf')">Shelf Scores</button>
-            <button class="chart-tog"        id="tog-nbme"  onclick="setScoreView('nbme')">NBMEs</button>
-          </div>
-        </div>
-        <div class="score-mini-grid">
-          <div class="score-mini"><div class="score-mini-num" id="score-latest">–</div><div class="score-mini-lbl">Latest</div></div>
-          <div class="score-mini"><div class="score-mini-num" id="score-avg">–</div><div class="score-mini-lbl">Average</div></div>
-          <div class="score-mini"><div class="score-mini-num" id="score-best">–</div><div class="score-mini-lbl">Best</div></div>
-        </div>
-        <canvas id="shelf-chart"></canvas>
-      </div>
-
-      <div class="dash-card">
-        <div class="dash-head">
-          <div class="dash-title">Weak Spots</div>
-          <div class="dash-meta" id="ws-frac">0 / 0</div>
-        </div>
-        <div class="mini-progress-line"><div class="mini-progress-fill" id="ws-progress-fill"></div></div>
-        <div class="ws-filter-row">
-          <button class="ws-filter-btn active" id="ws-filter-all"  onclick="setTopicFilter('all')">All</button>
-          <button class="ws-filter-btn"        id="ws-filter-open" onclick="setTopicFilter('open')">Open</button>
-        </div>
-        <div class="ws-list" id="ws-list"></div>
-        <div class="ws-add">
-          <input class="input" id="ws-inp" placeholder="Add weak spot…" onkeydown="if(event.key==='Enter')addWeakSpot()">
-          <button class="btn btn-ghost btn-sm" onclick="addWeakSpot()">Add</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- CALENDAR -->
-    <div class="dash-card cal-card" style="margin-top:14px">
-      <div class="dash-head">
-        <div class="dash-title">Calendar</div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <button class="btn btn-ghost btn-xs" onclick="calPrevMonth()">‹</button>
-          <div class="dash-meta" id="cal-month-lbl" style="font-size:.78rem;color:var(--text-primary);font-family:var(--font-display);font-weight:600;min-width:120px;text-align:center"></div>
-          <button class="btn btn-ghost btn-xs" onclick="calNextMonth()">›</button>
-          <button class="btn btn-ghost btn-xs" onclick="calGoToday()">Today</button>
-        </div>
-      </div>
-      <div id="cal-grid"></div>
-    </div>
-  `;
-}
-
-function rebuildTopicsTab() {
-  const tab = document.getElementById('tab-topics');
-  if (!tab) return;
-  tab.innerHTML = `
-    <div class="progress-bar-card">
-      <svg width="58" height="58" viewBox="0 0 58 58" style="flex-shrink:0">
-        <circle cx="29" cy="29" r="23" fill="none" stroke="var(--border)" stroke-width="5"/>
-        <circle id="ring-arc" cx="29" cy="29" r="23" fill="none" stroke="var(--accent)" stroke-width="5"
-          stroke-dasharray="144.5" stroke-dashoffset="144.5" stroke-linecap="round"
-          transform="rotate(-90 29 29)" style="transition:stroke-dashoffset .5s ease"/>
-      </svg>
-      <div class="ring-stats">
-        <div class="ring-main" id="ring-frac">0 / 0</div>
-        <div class="ring-sub">topics completed</div>
-        <div class="ring-pct" id="ring-pct">0% done</div>
-      </div>
-      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openTopicArchiveModal()">
-        Archived <span id="topic-arch-badge" class="arch-badge" style="display:none;margin-left:4px"></span>
-      </button>
-    </div>
-
-    <div class="topic-toolbar">
-      <input class="input" id="topic-search-inp" placeholder="Search topics…" oninput="renderTopics()">
-      <div class="topic-filter-group">
-        <button class="topic-filter-btn active" id="topic-filter-all"  onclick="setTopicFilterFull('all')">All</button>
-        <button class="topic-filter-btn"        id="topic-filter-open" onclick="setTopicFilterFull('open')">Open</button>
-        <button class="topic-filter-btn"        id="topic-filter-done" onclick="setTopicFilterFull('done')">Done</button>
-      </div>
-      <button class="btn btn-ghost btn-sm" onclick="sortTopicsByPriority()" title="Sort by priority" style="font-family:var(--font-mono);font-size:.7rem;padding:0 .6rem;height:28px;flex-shrink:0">Sort</button>
-    </div>
-
-    <div class="topic-list-full" id="topics-list"></div>
-
-    <div class="topic-add-row">
-      <input class="input" id="new-topic-inp" placeholder="Add topic…" onkeydown="if(event.key==='Enter')addTopic()">
-      <button class="btn btn-primary btn-sm" onclick="addTopic()">Add</button>
-    </div>
-
-    <div class="resources-section">
-      <div class="section-label" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <span style="font-family:var(--font-mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--text-tertiary)">Resources</span>
-        <button class="btn btn-ghost btn-xs" onclick="openResourceArchiveModal()">
-          Archived <span id="res-arch-badge" class="arch-badge" style="display:none;margin-left:4px"></span>
-        </button>
-      </div>
-      <div id="res-list"></div>
-      <div class="add-res-row">
-        <input class="input" id="new-res-group-inp" placeholder="Group (e.g. UWorld)" style="max-width:130px">
-        <input class="input" id="new-res-inp" placeholder="Resource name…" style="flex:1" onkeydown="if(event.key==='Enter')addResource()">
-        <button class="btn btn-ghost btn-sm" onclick="addResource()">Add</button>
-      </div>
-    </div>
-  `;
-}
 
 // ── Render All ────────────────────────────────────────────
 function renderAll() {
@@ -1125,13 +610,7 @@ function renderWeakSpots() {
   }
   shown.forEach(topic => {
     const prio = topic.priority || 'none';
-    const badge = prio === 'high'
-      ? '<span style="font-family:var(--font-mono);font-size:.5rem;padding:0 4px;border-radius:3px;background:#FCEBEB;color:#A32D2D;flex-shrink:0">H</span>'
-      : prio === 'medium'
-      ? '<span style="font-family:var(--font-mono);font-size:.5rem;padding:0 4px;border-radius:3px;background:#FAEEDA;color:#633806;flex-shrink:0">M</span>'
-      : prio === 'low'
-      ? '<span style="font-family:var(--font-mono);font-size:.5rem;padding:0 4px;border-radius:3px;background:var(--bg-elevated);color:var(--text-tertiary);flex-shrink:0">L</span>'
-      : '';
+    const badge = prioBadge(prio, 'small');
     const row = document.createElement('div');
     row.className = 'ws-row' + (topic.done ? ' done' : '');
     row.onclick = () => toggleTopicDone(topic.id);
@@ -1196,13 +675,7 @@ function renderTopics() {
   shown.forEach((topic) => {
     const realIdx = state.topics.indexOf(topic);
     const prio = topic.priority || 'none';
-    const prioBadge = prio === 'high'
-      ? '<span style="font-family:var(--font-mono);font-size:.55rem;padding:1px 6px;border-radius:10px;background:#FCEBEB;color:#A32D2D;border:1px solid #F09595;flex-shrink:0">HIGH</span>'
-      : prio === 'medium'
-      ? '<span style="font-family:var(--font-mono);font-size:.55rem;padding:1px 6px;border-radius:10px;background:#FAEEDA;color:#633806;border:1px solid #EF9F27;flex-shrink:0">MED</span>'
-      : prio === 'low'
-      ? '<span style="font-family:var(--font-mono);font-size:.55rem;padding:1px 6px;border-radius:10px;background:var(--bg-elevated);color:var(--text-tertiary);border:1px solid var(--border);flex-shrink:0">LOW</span>'
-      : '';
+    const prioBadgeHtml = prioBadge(prio);
     const prioTitle = prio === 'none' ? 'Set priority' : prio === 'high' ? 'High → Medium' : prio === 'medium' ? 'Medium → Low' : 'Low → None';
     const prioColor = prio === 'high' ? '#A32D2D' : prio === 'medium' ? '#633806' : prio === 'low' ? 'var(--text-tertiary)' : 'var(--text-tertiary)';
 
@@ -1214,7 +687,7 @@ function renderTopics() {
       <span class="topic-drag-handle" title="Drag to reorder">⠿</span>
       <div class="t-check" onclick="event.stopPropagation();toggleTopicDone('${topic.id}')" style="cursor:pointer;width:18px;height:18px;border-radius:4px;border:1px solid var(--border-bright);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0">${topic.done?'✓':''}</div>
       <div class="topic-name-full" onclick="event.stopPropagation();toggleTopicDone('${topic.id}')" style="cursor:pointer">${escH(topic.name)}</div>
-      ${prioBadge}
+      ${prioBadgeHtml}
       <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
         <button class="topic-arch-btn" title="${prioTitle}" onclick="event.stopPropagation();cycleTopicPriority('${topic.id}')" style="color:${prioColor};font-size:.7rem;min-width:22px">●</button>
         <button class="topic-arch-btn" onclick="event.stopPropagation();archiveTopicById('${topic.id}')">Archive</button>
