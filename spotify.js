@@ -35,13 +35,9 @@ let spRepeatState      = 'off';
 let spCurrentTrackUri  = null;
 let spAddMode          = false;
 let spIsLiked          = false;
-let spVibeActive       = false;
-let spVibeCtx          = null;
-let spVibeAnalyser     = null;
-let spVibeSource       = null;
-let spVibeRaf          = null;
+// Track whether we're showing last-played (so poll can replace it)
+let spShowingLastPlayed = false;
 
-// ── Quotes ────────────────────────────────────────────────
 const ALL_QUOTES = [
   { text:"The difference between the impossible and the possible lies in a person's determination.", attr:"Tommy Lasorda" },
   { text:"You have to fight to reach your dream. You have to sacrifice and work hard for it.", attr:"Lionel Messi" },
@@ -87,69 +83,29 @@ let focusQuoteIdx   = Math.floor(Math.random() * ALL_QUOTES.length);
 let focusQuoteTimer = null;
 let focusRightMode  = 'playlists';
 
-// ── SVG icon helpers ──────────────────────────────────────
+// ── SVG icons ─────────────────────────────────────────────
 function svgShuffle(active) {
   const c = active ? '#1DB954' : 'currentColor';
-  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <polyline points="16 3 21 3 21 8"></polyline>
-    <line x1="4" y1="20" x2="21" y2="3"></line>
-    <polyline points="21 16 21 21 16 21"></polyline>
-    <line x1="15" y1="15" x2="21" y2="21"></line>
-  </svg>`;
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line></svg>`;
 }
 
 function svgRepeat(state) {
   const c = state !== 'off' ? '#1DB954' : 'currentColor';
-  if (state === 'track') {
-    return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <polyline points="17 1 21 5 17 9"></polyline>
-      <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
-      <polyline points="7 23 3 19 7 15"></polyline>
-      <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
-      <text x="10" y="14" font-size="7" fill="${c}" stroke="none" font-weight="bold">1</text>
-    </svg>`;
-  }
-  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <polyline points="17 1 21 5 17 9"></polyline>
-    <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
-    <polyline points="7 23 3 19 7 15"></polyline>
-    <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
-  </svg>`;
+  const inner = state === 'track'
+    ? `<text x="10" y="14" font-size="7" fill="${c}" stroke="none" font-weight="bold">1</text>`
+    : '';
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path>${inner}</svg>`;
 }
 
 function svgHeart(filled) {
   return filled
-    ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="#1DB954" stroke="#1DB954" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-       </svg>`
-    : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-       </svg>`;
+    ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="#1DB954" stroke="#1DB954" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`
+    : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>`;
 }
 
-// Add to playlist: queue-list + plus badge icon
 function svgAddToPlaylist(active) {
   const c = active ? '#1DB954' : 'currentColor';
-  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <line x1="3" y1="6" x2="15" y2="6"></line>
-    <line x1="3" y1="10" x2="12" y2="10"></line>
-    <line x1="3" y1="14" x2="10" y2="14"></line>
-    <circle cx="18" cy="16" r="4"></circle>
-    <line x1="18" y1="13" x2="18" y2="19"></line>
-    <line x1="15" y1="16" x2="21" y2="16"></line>
-  </svg>`;
-}
-
-// Vibe: audio waveform bars
-function svgVibe(active) {
-  const c = active ? '#C9913A' : 'currentColor';
-  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round">
-    <line x1="4" y1="9" x2="4" y2="15"></line>
-    <line x1="8" y1="5" x2="8" y2="19"></line>
-    <line x1="12" y1="8" x2="12" y2="16"></line>
-    <line x1="16" y1="4" x2="16" y2="20"></line>
-    <line x1="20" y1="9" x2="20" y2="15"></line>
-  </svg>`;
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="15" y2="6"></line><line x1="3" y1="10" x2="12" y2="10"></line><line x1="3" y1="14" x2="10" y2="14"></line><circle cx="18" cy="16" r="4"></circle><line x1="18" y1="13" x2="18" y2="19"></line><line x1="15" y1="16" x2="21" y2="16"></line></svg>`;
 }
 
 // ── Inject tab ────────────────────────────────────────────
@@ -161,7 +117,7 @@ function injectSpotifyTab() {
     const btn = document.createElement('button');
     btn.className = 'tab-btn'; btn.id = 'btn-focus';
     btn.onclick = () => showTab('focus');
-    btn.innerHTML = 'Focus';
+    btn.textContent = 'Focus';
     tabBar.appendChild(btn);
   }
 
@@ -170,21 +126,15 @@ function injectSpotifyTab() {
     panel.id = 'tab-focus'; panel.className = 'tab-panel';
     panel.innerHTML = `
       <div class="focus-tab-grid">
-        <!-- NOW PLAYING -->
         <div class="sp-card">
           <div class="dash-head" style="margin-bottom:.85rem">
             <div class="dash-title">Now Playing</div>
-            <button id="sp-vibe-header-btn" class="sp-text-btn" onclick="spToggleVibe()" style="font-size:.58rem;padding:3px 8px">
-              ${svgVibe(false)} Vibe
-            </button>
           </div>
           <div id="sp-main-content">
             <div class="sp-idle">Not connected to Spotify</div>
             <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Connect Spotify</button>
           </div>
         </div>
-
-        <!-- RIGHT PANEL -->
         <div class="pom-card">
           <div style="margin-bottom:1.1rem">
             <div class="dash-title" style="margin-bottom:.6rem">Pomodoro</div>
@@ -198,9 +148,7 @@ function injectSpotifyTab() {
               <button class="pom-btn" id="focus-pom-edit-btn" onclick="pomOpenEdit(this)">Edit</button>
             </div>
           </div>
-
           <div style="height:1px;background:var(--border);margin-bottom:1rem"></div>
-
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem">
             <div class="dash-title" id="focus-right-title">Playlists</div>
             <div style="display:flex;gap:3px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--r-sm);padding:3px">
@@ -208,7 +156,6 @@ function injectSpotifyTab() {
               <button class="advisor-tab-btn" id="focus-btn-quotes" onclick="setFocusRight('quotes')">Quotes</button>
             </div>
           </div>
-
           <div id="focus-playlists-panel" style="flex:1;overflow-y:auto;min-height:0">
             <input id="sp-playlist-search" class="input" placeholder="Search playlists…"
               style="width:100%;margin-bottom:.5rem;font-size:.78rem;padding:.3rem .5rem;box-sizing:border-box"
@@ -217,21 +164,18 @@ function injectSpotifyTab() {
               <div class="sp-idle" style="padding:1rem 0">Connect Spotify to see your playlists</div>
             </div>
           </div>
-
           <div id="focus-quotes-panel" style="display:none;flex-direction:column;flex:1;min-height:0">
             <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:1rem 0">
               <div id="focus-quote-text" style="font-family:var(--font-display);font-style:italic;font-size:1.45rem;color:var(--text-secondary);line-height:1.75;transition:opacity .5s ease;margin-bottom:1rem;text-align:center"></div>
               <div id="focus-quote-attr" style="font-family:var(--font-mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);transition:opacity .5s ease;text-align:center"></div>
             </div>
-            <div class="quote-nav-btns" style="display:flex;gap:8px;justify-content:center;padding-bottom:.5rem">
+            <div style="display:flex;gap:8px;justify-content:center;padding-bottom:.5rem">
               <button class="btn btn-ghost btn-sm" onclick="prevFocusQuote()">‹ Prev</button>
               <button class="btn btn-ghost btn-sm" onclick="nextFocusQuote()">Next ›</button>
             </div>
           </div>
         </div>
-      </div>
-      <canvas id="sp-vibe-canvas" style="position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:5;opacity:0;transition:opacity 1.2s ease;display:none"></canvas>
-    `;
+      </div>`;
     app.appendChild(panel);
   }
 
@@ -247,8 +191,7 @@ function syncFocusCardHeights() {
   if (!sp || !pom) return;
   if (window.innerWidth <= 700) { pom.style.height = ''; return; }
   var maxH = window.innerHeight - 216;
-  var h    = Math.min(sp.offsetHeight, maxH);
-  pom.style.height = h + 'px';
+  pom.style.height = Math.min(sp.offsetHeight, maxH) + 'px';
 }
 
 function observeFocusCardHeight() {
@@ -256,25 +199,24 @@ function observeFocusCardHeight() {
   if (!sp) return;
   if (_focusCardRO) _focusCardRO.disconnect();
   if (typeof ResizeObserver !== 'undefined') {
-    _focusCardRO = new ResizeObserver(function () { syncFocusCardHeights(); });
+    _focusCardRO = new ResizeObserver(syncFocusCardHeights);
     _focusCardRO.observe(sp);
   }
   window.addEventListener('resize', syncFocusCardHeights);
   requestAnimationFrame(syncFocusCardHeights);
 }
 
-// ── Focus right panel toggle ──────────────────────────────
+// ── Focus right panel ─────────────────────────────────────
 function setFocusRight(mode) {
   focusRightMode = mode;
   document.getElementById('focus-btn-playlists')?.classList.toggle('active', mode === 'playlists');
   document.getElementById('focus-btn-quotes')?.classList.toggle('active', mode === 'quotes');
-  const playlistsPanel = document.getElementById('focus-playlists-panel');
-  const quotesPanel    = document.getElementById('focus-quotes-panel');
-  if (playlistsPanel) playlistsPanel.style.display = mode === 'playlists' ? 'block' : 'none';
-  if (quotesPanel)    quotesPanel.style.display    = mode === 'quotes'    ? 'flex'  : 'none';
+  const pp = document.getElementById('focus-playlists-panel');
+  const qp = document.getElementById('focus-quotes-panel');
+  if (pp) pp.style.display = mode === 'playlists' ? 'block' : 'none';
+  if (qp) qp.style.display = mode === 'quotes'    ? 'flex'  : 'none';
   document.getElementById('focus-right-title').textContent = mode === 'playlists' ? 'Playlists' : 'Quotes';
-  if (mode === 'quotes') startFocusQuotes();
-  else stopFocusQuotes();
+  if (mode === 'quotes') startFocusQuotes(); else stopFocusQuotes();
 }
 
 // ── Quotes ────────────────────────────────────────────────
@@ -290,51 +232,25 @@ function showFocusQuote(idx) {
     qt.style.opacity = '1'; qa.style.opacity = '1';
   }, 500);
 }
+function nextFocusQuote() { focusQuoteIdx = (focusQuoteIdx + 1) % ALL_QUOTES.length; showFocusQuote(focusQuoteIdx); resetFocusQuoteTimer(); }
+function prevFocusQuote() { focusQuoteIdx = (focusQuoteIdx - 1 + ALL_QUOTES.length) % ALL_QUOTES.length; showFocusQuote(focusQuoteIdx); resetFocusQuoteTimer(); }
+function startFocusQuotes() { showFocusQuote(focusQuoteIdx); focusQuoteTimer = setInterval(nextFocusQuote, 10000); }
+function stopFocusQuotes()  { clearInterval(focusQuoteTimer); focusQuoteTimer = null; }
+function resetFocusQuoteTimer() { clearInterval(focusQuoteTimer); focusQuoteTimer = setInterval(nextFocusQuote, 10000); }
 
-function nextFocusQuote() {
-  focusQuoteIdx = (focusQuoteIdx + 1) % ALL_QUOTES.length;
-  showFocusQuote(focusQuoteIdx);
-  resetFocusQuoteTimer();
-}
-
-function prevFocusQuote() {
-  focusQuoteIdx = (focusQuoteIdx - 1 + ALL_QUOTES.length) % ALL_QUOTES.length;
-  showFocusQuote(focusQuoteIdx);
-  resetFocusQuoteTimer();
-}
-
-function startFocusQuotes() {
-  showFocusQuote(focusQuoteIdx);
-  focusQuoteTimer = setInterval(nextFocusQuote, 10000);
-}
-
-function stopFocusQuotes() {
-  clearInterval(focusQuoteTimer);
-  focusQuoteTimer = null;
-}
-
-function resetFocusQuoteTimer() {
-  clearInterval(focusQuoteTimer);
-  focusQuoteTimer = setInterval(nextFocusQuote, 10000);
-}
-
-// ── Playlist search filter ────────────────────────────────
+// ── Playlist search ───────────────────────────────────────
 let _allPlaylists = [];
 
 function filterPlaylists(q) {
   const container = document.getElementById('sp-playlists-list');
   if (!container || !_allPlaylists.length) return;
   const term = q.trim().toLowerCase();
-  const filtered = term ? _allPlaylists.filter(pl => pl.name.toLowerCase().includes(term)) : _allPlaylists;
-  renderPlaylistRows(filtered, container);
+  renderPlaylistRows(term ? _allPlaylists.filter(pl => pl.name.toLowerCase().includes(term)) : _allPlaylists, container);
 }
 
 function renderPlaylistRows(playlists, container) {
   container.innerHTML = '';
-  if (!playlists.length) {
-    container.innerHTML = '<div class="sp-idle" style="padding:.5rem 0">No playlists match</div>';
-    return;
-  }
+  if (!playlists.length) { container.innerHTML = '<div class="sp-idle" style="padding:.5rem 0">No playlists match</div>'; return; }
   playlists.forEach(pl => {
     if (!pl) return;
     const img = pl.images?.[0]?.url || '';
@@ -343,27 +259,19 @@ function renderPlaylistRows(playlists, container) {
     div.onmouseenter = () => { div.style.background = 'var(--bg-elevated)'; div.style.borderColor = 'var(--border)'; };
     div.onmouseleave = () => { div.style.background = ''; div.style.borderColor = 'transparent'; };
     div.innerHTML = `
-      ${img
-        ? `<img src="${escH(img)}" style="width:38px;height:38px;border-radius:4px;object-fit:cover;flex-shrink:0">`
-        : '<div style="width:38px;height:38px;border-radius:4px;background:var(--bg-elevated);flex-shrink:0"></div>'
-      }
+      ${img ? `<img src="${escH(img)}" style="width:38px;height:38px;border-radius:4px;object-fit:cover;flex-shrink:0">` : '<div style="width:38px;height:38px;border-radius:4px;background:var(--bg-elevated);flex-shrink:0"></div>'}
       <div class="sp-playlist-meta">
         <div class="sp-playlist-name">${escH(pl.name)}</div>
         <div class="sp-playlist-count">${pl.owner ? pl.owner.display_name || '' : ''}</div>
       </div>
-      <div class="sp-playlist-play">▶</div>
-    `;
+      <div class="sp-playlist-play">▶</div>`;
     div.dataset.uri = pl.uri;
     div.onclick = () => playSpotifyPlaylist(pl.uri, pl.name);
     container.appendChild(div);
   });
-
   if (spAddMode) {
     container.querySelectorAll('.sp-playlist-row').forEach(row => {
-      row.onclick = () => {
-        spAddToPlaylist(row.dataset.uri || '', row.querySelector('.sp-playlist-name').textContent);
-        spToggleAddMode();
-      };
+      row.onclick = () => { spAddToPlaylist(row.dataset.uri || '', row.querySelector('.sp-playlist-name').textContent); spToggleAddMode(); };
     });
   }
 }
@@ -374,47 +282,47 @@ async function fetchSpotifyPlaylists() {
   const container = document.getElementById('sp-playlists-list');
   if (!container) return;
   container.innerHTML = '<div class="sp-idle" style="padding:.5rem 0">Loading playlists…</div>';
-
   try {
-    let resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=50', {
-      headers: { Authorization: `Bearer ${spToken}` }
-    });
-
+    let resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=50', { headers: { Authorization: `Bearer ${spToken}` } });
     if (resp.status === 401) {
       const ok = await refreshSpotifyToken();
-      if (!ok) {
-        container.innerHTML = `<div class="sp-idle">Session expired.</div><button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Reconnect</button>`;
-        return;
-      }
-      resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=50', {
-        headers: { Authorization: `Bearer ${spToken}` }
-      });
+      if (!ok) { container.innerHTML = `<div class="sp-idle">Session expired.</div><button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Reconnect</button>`; return; }
+      resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=50', { headers: { Authorization: `Bearer ${spToken}` } });
     }
-
-    if (!resp.ok) {
-      container.innerHTML = `<div class="sp-idle">Could not load playlists (${resp.status})</div>`;
-      return;
-    }
-
+    if (!resp.ok) { container.innerHTML = `<div class="sp-idle">Could not load playlists (${resp.status})</div>`; return; }
     const data = await resp.json();
     _allPlaylists = (data.items || []).filter(Boolean);
     renderPlaylistRows(_allPlaylists, container);
-  } catch(e) {
-    console.warn('Playlists fetch:', e);
-    container.innerHTML = `<div class="sp-idle">Could not load playlists</div>`;
-  }
+  } catch(e) { container.innerHTML = `<div class="sp-idle">Could not load playlists</div>`; }
 }
 
+// ── Play playlist — activate device first ─────────────────
 async function playSpotifyPlaylist(uri, name) {
   if (!spToken) return;
-  const body = { context_uri: uri };
-  if (spDeviceId) body.device_id = spDeviceId;
   try {
+    // Step 1: activate the browser player (required by autoplay policy)
+    if (spPlayer) await spPlayer.activateElement();
+
+    // Step 2: if we have a browser device, transfer playback to it first
+    if (spDeviceId) {
+      await fetch('https://api.spotify.com/v1/me/player', {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${spToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_ids: [spDeviceId], play: false }),
+      });
+      // Give Spotify a moment to register the transfer
+      await new Promise(r => setTimeout(r, 400));
+    }
+
+    // Step 3: play the playlist
+    const body = { context_uri: uri };
+    if (spDeviceId) body.device_id = spDeviceId;
     await fetch('https://api.spotify.com/v1/me/player/play', {
       method: 'PUT',
       headers: { 'Authorization': `Bearer ${spToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+    spShowingLastPlayed = false;
     setTimeout(fetchNowPlaying, 800);
   } catch(e) {
     window.open(`https://open.spotify.com/playlist/${uri.split(':')[2]}`, '_blank');
@@ -427,12 +335,9 @@ function spotifyLogin() {
   localStorage.setItem('sp_verifier', verifier);
   generateCodeChallenge(verifier).then(challenge => {
     const params = new URLSearchParams({
-      client_id:             SPOTIFY_CLIENT_ID,
-      response_type:         'code',
-      redirect_uri:          SPOTIFY_REDIRECT,
-      scope:                 SPOTIFY_SCOPES,
-      code_challenge_method: 'S256',
-      code_challenge:        challenge,
+      client_id: SPOTIFY_CLIENT_ID, response_type: 'code',
+      redirect_uri: SPOTIFY_REDIRECT, scope: SPOTIFY_SCOPES,
+      code_challenge_method: 'S256', code_challenge: challenge,
     });
     window.location = `https://accounts.spotify.com/authorize?${params}`;
   });
@@ -440,15 +345,12 @@ function spotifyLogin() {
 
 function generateCodeVerifier(length) {
   const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-  return Array.from(crypto.getRandomValues(new Uint8Array(length)))
-    .map(b => possible[b % possible.length]).join('');
+  return Array.from(crypto.getRandomValues(new Uint8Array(length))).map(b => possible[b % possible.length]).join('');
 }
 
 async function generateCodeChallenge(verifier) {
-  const data   = new TextEncoder().encode(verifier);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return btoa(String.fromCharCode(...new Uint8Array(digest)))
-    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
 
 async function exchangeSpotifyCode(code) {
@@ -457,13 +359,7 @@ async function exchangeSpotifyCode(code) {
   const resp = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id:     SPOTIFY_CLIENT_ID,
-      grant_type:    'authorization_code',
-      code,
-      redirect_uri:  SPOTIFY_REDIRECT,
-      code_verifier: verifier,
-    })
+    body: new URLSearchParams({ client_id: SPOTIFY_CLIENT_ID, grant_type: 'authorization_code', code, redirect_uri: SPOTIFY_REDIRECT, code_verifier: verifier })
   });
   const data = await resp.json();
   if (data.access_token) {
@@ -475,8 +371,6 @@ async function exchangeSpotifyCode(code) {
     initSpotifyPlayer();
     startSpotifyPoll();
     setTimeout(fetchSpotifyPlaylists, 1500);
-    setTimeout(fetchLastPlayed, 800);
-
     const pending = localStorage.getItem('sp_pending_add');
     if (pending) {
       localStorage.removeItem('sp_pending_add');
@@ -485,11 +379,7 @@ async function exchangeSpotifyCode(code) {
         setTimeout(async () => {
           const pid = playlistUri.split(':')[2];
           if (!pid || !trackUri) return;
-          const r = await fetch('https://api.spotify.com/v1/playlists/' + pid + '/tracks', {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + spToken, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uris: [trackUri] })
-          });
+          const r = await fetch('https://api.spotify.com/v1/playlists/' + pid + '/tracks', { method: 'POST', headers: { 'Authorization': 'Bearer ' + spToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ uris: [trackUri] }) });
           showToast(r.ok ? ('Added to ' + playlistName) : 'Could not add track — try again', 2500);
         }, 2000);
       } catch(e) {}
@@ -501,20 +391,11 @@ async function refreshSpotifyToken() {
   const refresh = localStorage.getItem('sp_refresh');
   if (!refresh) return false;
   const resp = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id:     SPOTIFY_CLIENT_ID,
-      grant_type:    'refresh_token',
-      refresh_token: refresh,
-    })
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: SPOTIFY_CLIENT_ID, grant_type: 'refresh_token', refresh_token: refresh })
   });
   const data = await resp.json();
-  if (data.access_token) {
-    spToken = data.access_token;
-    localStorage.setItem('sp_token', spToken);
-    return true;
-  }
+  if (data.access_token) { spToken = data.access_token; localStorage.setItem('sp_token', spToken); return true; }
   return false;
 }
 
@@ -523,46 +404,29 @@ function initSpotify() {
   const params = new URLSearchParams(window.location.search);
   const code   = params.get('code');
   if (code) { exchangeSpotifyCode(code); return; }
-
   const saved = localStorage.getItem('sp_token');
   if (saved) {
     spToken = saved;
     initSpotifyPlayer();
     startSpotifyPoll();
-    // Show last played immediately while waiting for poll — feels snappier on load
-    setTimeout(fetchLastPlayed, 400);
+    // fetchNowPlaying will show last-played on 204 — no separate timer needed
   }
-
   if (!window.Spotify && !document.getElementById('sp-sdk')) {
-    const script  = document.createElement('script');
-    script.id     = 'sp-sdk';
-    script.src    = 'https://sdk.scdn.co/spotify-player.js';
+    const script = document.createElement('script');
+    script.id = 'sp-sdk'; script.src = 'https://sdk.scdn.co/spotify-player.js';
     document.head.appendChild(script);
   }
 }
 
 // ── Web Playback SDK ──────────────────────────────────────
-window.onSpotifyWebPlaybackSDKReady = function() {
-  if (!spToken) return;
-  initSpotifyPlayer();
-};
+window.onSpotifyWebPlaybackSDKReady = function() { if (!spToken) return; initSpotifyPlayer(); };
 
 function initSpotifyPlayer() {
   if (!window.Spotify || !spToken || spPlayer) return;
-  spPlayer = new Spotify.Player({
-    name: 'Step 2 Dashboard',
-    getOAuthToken: cb => cb(spToken),
-    volume: 0.8,
-  });
+  spPlayer = new Spotify.Player({ name: 'Step 2 Dashboard', getOAuthToken: cb => cb(spToken), volume: 0.8 });
   spPlayer.addListener('ready', ({ device_id }) => { spDeviceId = device_id; });
-  spPlayer.addListener('player_state_changed', state => {
-    if (!state) return;
-    updateNowPlayingFromSDK(state);
-  });
-  spPlayer.addListener('authentication_error', async () => {
-    const ok = await refreshSpotifyToken();
-    if (ok) initSpotifyPlayer();
-  });
+  spPlayer.addListener('player_state_changed', state => { if (!state) return; updateNowPlayingFromSDK(state); });
+  spPlayer.addListener('authentication_error', async () => { const ok = await refreshSpotifyToken(); if (ok) initSpotifyPlayer(); });
   spPlayer.connect();
 }
 
@@ -575,46 +439,39 @@ function startSpotifyPoll() {
   spPollTimer = setInterval(fetchNowPlaying, 10000);
   spInterpolateTimer = setInterval(() => {
     if (!spIsPlaying || !spLastDuration) return;
-    const elapsed      = Date.now() - spLastPollTime;
-    const interpolated = Math.min(spLastProgress + elapsed, spLastDuration);
-    const pct          = (interpolated / spLastDuration) * 100;
+    const interpolated = Math.min(spLastProgress + (Date.now() - spLastPollTime), spLastDuration);
     const bar = document.querySelector('.sp-progress-bar');
-    if (bar) bar.style.width = pct.toFixed(2) + '%';
+    if (bar) bar.style.width = ((interpolated / spLastDuration) * 100).toFixed(2) + '%';
     const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
-    document.querySelectorAll('.sp-time-row').forEach(row => {
-      const span = row.querySelector('span:first-child');
-      if (span) span.textContent = fmt(interpolated);
-    });
+    document.querySelectorAll('.sp-time-row').forEach(row => { const span = row.querySelector('span:first-child'); if (span) span.textContent = fmt(interpolated); });
   }, 1000);
 }
 
 async function fetchNowPlaying() {
   if (!spToken) return;
   try {
-    const resp = await fetch('https://api.spotify.com/v1/me/player', {
+    // KEY FIX: additional_types=track,episode makes Spotify return podcast episodes
+    const resp = await fetch('https://api.spotify.com/v1/me/player?additional_types=track,episode', {
       headers: { 'Authorization': `Bearer ${spToken}` }
     });
     if (resp.status === 204 || (resp.status === 200 && resp.headers.get('content-length') === '0')) {
-      // Nothing playing — show last played instead of blank state
-      fetchLastPlayed(); return;
-    }
-    if (resp.status === 401) {
-      const ok = await refreshSpotifyToken();
-      if (ok) fetchNowPlaying();
+      // Nothing playing — only show last-played if not already showing it
+      if (!spShowingLastPlayed) { spShowingLastPlayed = true; fetchLastPlayed(); }
       return;
     }
+    if (resp.status === 401) { const ok = await refreshSpotifyToken(); if (ok) fetchNowPlaying(); return; }
     if (!resp.ok) { renderNowPlaying(null); return; }
-
     const data = await resp.json();
-    if (!data || !data.item) { renderNowPlaying(null); return; }
+    if (!data || !data.item) { if (!spShowingLastPlayed) { spShowingLastPlayed = true; fetchLastPlayed(); } return; }
+
+    // We have live data — clear last-played flag
+    spShowingLastPlayed = false;
 
     const prevShuffle = spShuffleState;
     const prevRepeat  = spRepeatState;
     spShuffleState = data.shuffle_state || false;
     spRepeatState  = data.repeat_state  || 'off';
-    if (spShuffleState !== prevShuffle || spRepeatState !== prevRepeat) {
-      updateShuffleRepeatButtons();
-    }
+    if (spShuffleState !== prevShuffle || spRepeatState !== prevRepeat) updateShuffleRepeatButtons();
 
     const prevUri     = spCurrentTrackUri;
     spCurrentTrack    = data;
@@ -636,14 +493,11 @@ async function fetchNowPlaying() {
 // ── Like / Unlike ─────────────────────────────────────────
 async function checkLikedState(trackUri) {
   if (!spToken || !trackUri) return;
-  // Episodes (podcasts) use a different API — skip liked check for them
   if (trackUri.includes(':episode:')) { spIsLiked = false; updateLikeButton(); return; }
   const id = trackUri.split(':')[2];
   if (!id) return;
   try {
-    const resp = await fetch(`https://api.spotify.com/v1/me/tracks/contains?ids=${id}`, {
-      headers: { 'Authorization': `Bearer ${spToken}` }
-    });
+    const resp = await fetch(`https://api.spotify.com/v1/me/tracks/contains?ids=${id}`, { headers: { 'Authorization': `Bearer ${spToken}` } });
     if (!resp.ok) return;
     const data = await resp.json();
     spIsLiked = Array.isArray(data) ? data[0] : false;
@@ -655,12 +509,8 @@ async function spToggleLike() {
   if (!spToken || !spCurrentTrackUri) return;
   const id = spCurrentTrackUri.split(':')[2];
   if (!id) return;
-  const method = spIsLiked ? 'DELETE' : 'PUT';
   try {
-    await fetch(`https://api.spotify.com/v1/me/tracks?ids=${id}`, {
-      method,
-      headers: { 'Authorization': `Bearer ${spToken}` }
-    });
+    await fetch(`https://api.spotify.com/v1/me/tracks?ids=${id}`, { method: spIsLiked ? 'DELETE' : 'PUT', headers: { 'Authorization': `Bearer ${spToken}` } });
     spIsLiked = !spIsLiked;
     updateLikeButton();
     showToast(spIsLiked ? 'Saved to Liked Songs' : 'Removed from Liked Songs', 2000);
@@ -682,20 +532,15 @@ function spSeek(e) {
   const rect = wrap.getBoundingClientRect();
   const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
   const posMs = Math.floor(pct * spLastDuration);
-  spLastProgress = posMs;
-  spLastPollTime = Date.now();
+  spLastProgress = posMs; spLastPollTime = Date.now();
   const bar = wrap.querySelector('.sp-progress-bar');
   if (bar) bar.style.width = (pct * 100).toFixed(2) + '%';
-  fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${posMs}`, {
-    method: 'PUT',
-    headers: { 'Authorization': `Bearer ${spToken}` }
-  }).catch(() => {});
+  fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${posMs}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${spToken}` } }).catch(() => {});
 }
 
-// ── Lightweight button updates ────────────────────────────
+// ── Button updates ────────────────────────────────────────
 function updatePlayPauseButtons(isPlaying) {
-  const icon  = isPlaying ? '⏸' : '▶';
-  const title = isPlaying ? 'Pause' : 'Play';
+  const icon = isPlaying ? '⏸' : '▶'; const title = isPlaying ? 'Pause' : 'Play';
   document.querySelectorAll('.sp-ctrl-btn.play').forEach(b => { b.textContent = icon; b.title = title; });
   document.querySelectorAll('.hdr-sp-btn.play').forEach(b => { b.textContent = icon; b.title = title; });
   const dot = document.querySelector('.hdr-sp-dot');
@@ -703,73 +548,41 @@ function updatePlayPauseButtons(isPlaying) {
 }
 
 function updateShuffleRepeatButtons() {
-  document.querySelectorAll('.sp-shuffle-btn').forEach(btn => {
-    btn.innerHTML = svgShuffle(spShuffleState);
-    btn.classList.toggle('active', spShuffleState);
-    btn.title = spShuffleState ? 'Shuffle: On' : 'Shuffle: Off';
-  });
-  document.querySelectorAll('.sp-repeat-btn').forEach(btn => {
-    btn.innerHTML = svgRepeat(spRepeatState);
-    btn.setAttribute('data-state', spRepeatState);
-    btn.classList.toggle('active', spRepeatState !== 'off');
-    btn.title = spRepeatState === 'track' ? 'Repeat: Track' : spRepeatState === 'context' ? 'Repeat: All' : 'Repeat: Off';
-  });
+  document.querySelectorAll('.sp-shuffle-btn').forEach(btn => { btn.innerHTML = svgShuffle(spShuffleState); btn.classList.toggle('active', spShuffleState); btn.title = spShuffleState ? 'Shuffle: On' : 'Shuffle: Off'; });
+  document.querySelectorAll('.sp-repeat-btn').forEach(btn => { btn.innerHTML = svgRepeat(spRepeatState); btn.setAttribute('data-state', spRepeatState); btn.classList.toggle('active', spRepeatState !== 'off'); btn.title = spRepeatState === 'track' ? 'Repeat: Track' : spRepeatState === 'context' ? 'Repeat: All' : 'Repeat: Off'; });
 }
 
 // ── SDK state update ──────────────────────────────────────
 function updateNowPlayingFromSDK(sdkState) {
   if (!sdkState || !sdkState.track_window) return;
-  const track   = sdkState.track_window.current_track;
-  const prevUri = spCurrentTrack?.item?.uri;
-  const newUri  = track.uri;
-  spLastProgress = sdkState.position || 0;
-  spLastDuration = sdkState.duration || 0;
-  spLastPollTime = Date.now();
-  spIsPlaying    = !sdkState.paused;
-
-  if (newUri === prevUri && prevUri !== undefined) {
-    updatePlayPauseButtons(spIsPlaying);
-    return;
-  }
-
+  const track = sdkState.track_window.current_track;
+  const newUri = track.uri;
+  spLastProgress = sdkState.position || 0; spLastDuration = sdkState.duration || 0;
+  spLastPollTime = Date.now(); spIsPlaying = !sdkState.paused;
+  if (newUri === spCurrentTrack?.item?.uri && newUri !== undefined) { updatePlayPauseButtons(spIsPlaying); return; }
+  spShowingLastPlayed = false;
   checkLikedState(newUri);
-  // SDK track_window.current_track has artists[] for songs, show for podcasts
   const isEpisode = track.type === 'episode';
   renderNowPlayingDirect({
-    isPlaying:  !sdkState.paused,
-    trackName:  track.name,
-    artistName: isEpisode
-      ? (track.album?.name || 'Podcast')
-      : (track.artists?.map(a => a.name).join(', ') || ''),
-    albumArt:   track.album?.images?.[0]?.url || '',
-    albumName:  track.album?.name || '',
-    progress:   sdkState.position,
-    duration:   sdkState.duration,
-    trackUri:   track.uri,
+    isPlaying: !sdkState.paused, trackName: track.name,
+    artistName: isEpisode ? (track.album?.name || 'Podcast') : (track.artists?.map(a => a.name).join(', ') || ''),
+    albumArt: track.album?.images?.[0]?.url || '', albumName: track.album?.name || '',
+    progress: sdkState.position, duration: sdkState.duration, trackUri: track.uri,
   });
 }
 
 // ── Render pipeline ───────────────────────────────────────
-// FIX #5: Handle podcasts (currently_playing_type === 'episode')
 function renderNowPlaying(data) {
   if (!data || !data.item) { renderNowPlayingDirect(null); return; }
-  const item      = data.item;
+  const item = data.item;
   const isPodcast = data.currently_playing_type === 'episode' || item.type === 'episode';
-  // Safely extract artwork — episodes store images on show, tracks on album
-  const artUrl = isPodcast
-    ? (item.show?.images?.[0]?.url || item.images?.[0]?.url || '')
-    : (item.album?.images?.[0]?.url || item.images?.[0]?.url || '');
   renderNowPlayingDirect({
     isPlaying:  data.is_playing,
     trackName:  item.name || 'Unknown',
-    artistName: isPodcast
-      ? (item.show?.name || item.show?.publisher || item.show?.description?.slice(0,40) || 'Podcast')
-      : (item.artists?.map(a => a.name).join(', ') || ''),
-    albumArt:   artUrl,
+    artistName: isPodcast ? (item.show?.name || item.show?.publisher || 'Podcast') : (item.artists?.map(a => a.name).join(', ') || ''),
+    albumArt:   isPodcast ? (item.show?.images?.[0]?.url || item.images?.[0]?.url || '') : (item.album?.images?.[0]?.url || ''),
     albumName:  isPodcast ? (item.show?.name || '') : (item.album?.name || ''),
-    progress:   data.progress_ms || 0,
-    duration:   item.duration_ms || 0,
-    trackUri:   item.uri || '',
+    progress:   data.progress_ms || 0, duration: item.duration_ms || 0, trackUri: item.uri || '',
   });
 }
 
@@ -781,183 +594,51 @@ function renderNowPlayingDirect(info) {
 function renderFocusTabNowPlaying(info) {
   const container = document.getElementById('sp-main-content');
   if (!container) return;
-
   if (!info) {
-    container.innerHTML = spToken
-      ? (() => { fetchLastPlayed(); return '<div class="sp-idle" style="padding:1rem 0 .3rem;font-size:.78rem;color:var(--text-tertiary)">Loading last played…</div>'; })()
-      : '<div class="sp-idle">Not connected to Spotify</div><button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Connect Spotify</button>';
+    if (!spToken) {
+      container.innerHTML = '<div class="sp-idle">Not connected to Spotify</div><button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Connect Spotify</button>';
+    }
+    // If token exists, fetchLastPlayed will populate — don't overwrite with blank
     return;
   }
-
   const pct = info.duration ? (info.progress / info.duration) * 100 : 0;
   const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
-
   container.innerHTML = `
-    <img class="sp-art-lg" src="${escH(info.albumArt)}" alt="${escH(info.albumName)}"
-         onerror="this.style.background='var(--bg-elevated)';this.style.minHeight='60px'">
+    <img class="sp-art-lg" src="${escH(info.albumArt)}" alt="${escH(info.albumName)}" onerror="this.style.background='var(--bg-elevated)'">
     <div class="sp-track-lg">${escH(info.trackName)}</div>
     <div class="sp-artist-lg">${escH(info.artistName)}</div>
     <div class="sp-progress-wrap" onclick="spSeek(event)" title="Click to seek">
       <div class="sp-progress-bar" style="width:${pct.toFixed(2)}%"></div>
     </div>
-    <div class="sp-time-row">
-      <span>${fmt(info.progress)}</span>
-      <span>${fmt(info.duration)}</span>
-    </div>
+    <div class="sp-time-row"><span>${fmt(info.progress)}</span><span>${fmt(info.duration)}</span></div>
     <div class="sp-controls" style="flex-direction:column;gap:8px">
       <div style="display:flex;align-items:center;justify-content:center;gap:16px">
         <button class="sp-ctrl-btn" onclick="spPrev()" title="Previous">⏮</button>
-        <button class="sp-ctrl-btn play" onclick="spPlayPause()" title="${info.isPlaying?'Pause':'Play'}">
-          ${info.isPlaying ? '⏸' : '▶'}
-        </button>
+        <button class="sp-ctrl-btn play" onclick="spPlayPause()" title="${info.isPlaying?'Pause':'Play'}">${info.isPlaying ? '⏸' : '▶'}</button>
         <button class="sp-ctrl-btn" onclick="spNext()" title="Next">⏭</button>
       </div>
       <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:2px">
-        <button class="sp-icon-btn sp-shuffle-btn${spShuffleState ? ' active' : ''}"
-          onclick="spToggleShuffle()" title="${spShuffleState ? 'Shuffle: On' : 'Shuffle: Off'}">
-          ${svgShuffle(spShuffleState)}
-        </button>
-        <button class="sp-icon-btn sp-repeat-btn${spRepeatState !== 'off' ? ' active' : ''}"
-          onclick="spCycleRepeat()" data-state="${spRepeatState}"
-          title="${spRepeatState === 'track' ? 'Repeat: Track' : spRepeatState === 'context' ? 'Repeat: All' : 'Repeat: Off'}">
-          ${svgRepeat(spRepeatState)}
-        </button>
-        <button class="sp-icon-btn sp-like-btn" onclick="spToggleLike()"
-          title="${spIsLiked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}">
-          ${svgHeart(spIsLiked)}
-        </button>
-        <button class="sp-icon-btn sp-save-btn${spAddMode ? ' active' : ''}" onclick="spToggleAddMode()"
-          title="Add to playlist">
-          ${svgAddToPlaylist(spAddMode)}
-        </button>
+        <button class="sp-icon-btn sp-shuffle-btn${spShuffleState ? ' active' : ''}" onclick="spToggleShuffle()" title="${spShuffleState ? 'Shuffle: On' : 'Shuffle: Off'}">${svgShuffle(spShuffleState)}</button>
+        <button class="sp-icon-btn sp-repeat-btn${spRepeatState !== 'off' ? ' active' : ''}" onclick="spCycleRepeat()" data-state="${spRepeatState}" title="${spRepeatState === 'track' ? 'Repeat: Track' : spRepeatState === 'context' ? 'Repeat: All' : 'Repeat: Off'}">${svgRepeat(spRepeatState)}</button>
+        <button class="sp-icon-btn sp-like-btn" onclick="spToggleLike()" title="${spIsLiked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}">${svgHeart(spIsLiked)}</button>
+        <button class="sp-icon-btn sp-save-btn${spAddMode ? ' active' : ''}" onclick="spToggleAddMode()" title="Add to playlist">${svgAddToPlaylist(spAddMode)}</button>
       </div>
-    </div>
-  `;
-
+    </div>`;
   const wrap = container.querySelector('.sp-progress-wrap');
-  if (wrap) {
-    wrap.addEventListener('mouseenter', () => { wrap.style.height = '6px'; });
-    wrap.addEventListener('mouseleave', () => { wrap.style.height = ''; });
-  }
-
+  if (wrap) { wrap.addEventListener('mouseenter', () => { wrap.style.height='6px'; }); wrap.addEventListener('mouseleave', () => { wrap.style.height=''; }); }
   const art = container.querySelector('.sp-art-lg');
   if (art) art.onload = () => { if (typeof syncFocusCardHeights === 'function') syncFocusCardHeights(); };
 }
 
-// ── Vibe Mode ─────────────────────────────────────────────
-function spToggleVibe() {
-  spVibeActive = !spVibeActive;
-
-  // Sync all vibe buttons (header persistent + any in controls row)
-  document.querySelectorAll('.sp-vibe-btn, #sp-vibe-header-btn').forEach(btn => {
-    btn.innerHTML = svgVibe(spVibeActive) + ' Vibe';
-    btn.classList.toggle('active', spVibeActive);
-  });
-
-  const canvas = document.getElementById('sp-vibe-canvas');
-  if (spVibeActive) {
-    startVibeEngine(canvas);
-  } else {
-    stopVibeEngine();
-  }
-}
-
-function startVibeEngine(canvas) {
-  stopVibeEngine();
-  // Sample album art colour and drive a CSS glow + background gradient on the sp-card
-  const art = document.querySelector('.sp-art-lg');
-  const spCard = document.querySelector('.sp-card');
-  if (!spCard) return;
-
-  // Extract dominant colour from album art via canvas sampling
-  function sampleArtColor() {
-    if (!art || !art.complete || !art.naturalWidth) return [176, 120, 48]; // amber fallback
-    try {
-      const tmp = document.createElement('canvas');
-      tmp.width = 8; tmp.height = 8;
-      const ctx = tmp.getContext('2d');
-      ctx.drawImage(art, 0, 0, 8, 8);
-      const px = ctx.getImageData(2, 2, 4, 4).data;
-      let r=0,g=0,b=0,n=0;
-      for (let i=0;i<px.length;i+=4){ r+=px[i]; g+=px[i+1]; b+=px[i+2]; n++; }
-      return [Math.round(r/n), Math.round(g/n), Math.round(b/n)];
-    } catch(e) { return [176, 120, 48]; }
-  }
-
-  let [r,g,b] = sampleArtColor();
-  // If art not loaded yet, wait then resample
-  if (art && !art.complete) {
-    art.addEventListener('load', () => { [r,g,b] = sampleArtColor(); applyGlow(); });
-  }
-
-  function applyGlow() {
-    if (!spVibeActive) return;
-    spCard.style.transition = 'box-shadow 2s ease, background 2s ease';
-    spCard.style.boxShadow  = `0 0 60px 12px rgba(${r},${g},${b},0.35), 0 0 120px 30px rgba(${r},${g},${b},0.15)`;
-    spCard.style.background = `linear-gradient(160deg, rgba(${r},${g},${b},0.08) 0%, var(--bg-card) 60%)`;
-  }
-
-  applyGlow();
-
-  // Pulse the glow in time with estimated beat (120bpm)
-  const bpm = 120;
-  const msPerBeat = 60000 / bpm;
-
-  function tick() {
-    if (!spVibeActive) { spVibeRaf = null; return; }
-    spVibeRaf = requestAnimationFrame(tick);
-
-    const elapsed  = Date.now() - spLastPollTime;
-    const curPos   = spLastProgress + (spIsPlaying ? elapsed : 0);
-    const phase    = (curPos % msPerBeat) / msPerBeat;
-    const pulse    = Math.pow(Math.sin(phase * Math.PI), 2) * (spIsPlaying ? 1 : 0.3);
-    const glow1    = (0.25 + pulse * 0.25).toFixed(3);
-    const glow2    = (0.10 + pulse * 0.12).toFixed(3);
-    const spread1  = Math.round(60 + pulse * 30);
-    const spread2  = Math.round(120 + pulse * 60);
-    if (spCard) {
-      spCard.style.boxShadow = `0 0 ${spread1}px 12px rgba(${r},${g},${b},${glow1}), 0 0 ${spread2}px 30px rgba(${r},${g},${b},${glow2})`;
-    }
-    // Also shift bg gradient slightly on beat
-    const bgA = (0.06 + pulse * 0.08).toFixed(3);
-    if (spCard) spCard.style.background = `linear-gradient(160deg, rgba(${r},${g},${b},${bgA}) 0%, var(--bg-card) 65%)`;
-  }
-
-  tick();
-}
-
-const spVibeEngineState = { particles: [] };
-
-function stopVibeEngine() {
-  if (spVibeRaf) { cancelAnimationFrame(spVibeRaf); spVibeRaf = null; }
-  spVibeEngineState.particles = [];
-  // Clean up card glow
-  const spCard = document.querySelector('.sp-card');
-  if (spCard) {
-    spCard.style.transition = 'box-shadow 1s ease, background 1s ease';
-    spCard.style.boxShadow  = '';
-    spCard.style.background = '';
-  }
-  const canvas = document.getElementById('sp-vibe-canvas');
-  if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); }
-}
-
 // ── Header widget ─────────────────────────────────────────
 function updateHeaderWidget(info) {
-  ensureHeaderWidgets(info);
+  ensureHeaderWidgets();
   const spSection = document.getElementById('sp-header-section');
   if (!spSection) return;
-
-  if (!info) {
-    spSection.innerHTML = `<button class="hdr-sp-connect" onclick="spotifyLogin()">♫ Connect Spotify</button>`;
-    return;
-  }
-
+  if (!info) { spSection.innerHTML = `<button class="hdr-sp-connect" onclick="spotifyLogin()">♫ Connect Spotify</button>`; return; }
   const playIcon = info.isPlaying ? '⏸' : '▶';
-  // FIX #3: art + track info clickable → go to Focus tab
   spSection.innerHTML = `
-    <img class="hdr-art" src="${escH(info.albumArt)}" alt="art" onerror="this.style.opacity='.3'"
-      onclick="showTab('focus')" style="cursor:pointer" title="Open Focus tab">
+    <img class="hdr-art" src="${escH(info.albumArt)}" alt="art" onerror="this.style.opacity='.3'" onclick="showTab('focus')" style="cursor:pointer" title="Open Focus tab">
     <div class="hdr-track-info" onclick="showTab('focus')" style="cursor:pointer" title="Open Focus tab">
       <div class="hdr-track-name">${escH(info.trackName)}</div>
       <div class="hdr-artist-name">${escH(info.artistName)}</div>
@@ -967,39 +648,22 @@ function updateHeaderWidget(info) {
       <button class="hdr-sp-btn" onclick="spPrev()" title="Previous">⏮</button>
       <button class="hdr-sp-btn play" onclick="spPlayPause()" title="${info.isPlaying?'Pause':'Play'}">${playIcon}</button>
       <button class="hdr-sp-btn" onclick="spNext()" title="Next">⏭</button>
-    </div>
-  `;
+    </div>`;
 }
 
-function ensureHeaderWidgets(info) {
+function ensureHeaderWidgets() {
   const headerRight = document.querySelector('.header-right');
   if (!headerRight) return;
-
   if (!document.getElementById('sp-header-section')) {
     const spDiv = document.createElement('div');
-    spDiv.id = 'sp-header-section';
-    spDiv.className = 'hdr-sp-section';
-    const saveStatus = document.getElementById('save-status');
-    headerRight.insertBefore(spDiv, saveStatus);
+    spDiv.id = 'sp-header-section'; spDiv.className = 'hdr-sp-section';
+    headerRight.insertBefore(spDiv, document.getElementById('save-status'));
   }
-
   if (!document.getElementById('pom-header-section')) {
     const pomDiv = document.createElement('div');
-    pomDiv.id = 'pom-header-section';
-    pomDiv.className = 'hdr-pom-section';
-    pomDiv.innerHTML = `
-      <div class="hdr-pom-inner">
-        <div class="hdr-pom-time" id="hdr-pom-time">45:00</div>
-        <div class="hdr-pom-phase" id="hdr-pom-phase">Work</div>
-      </div>
-      <div class="hdr-pom-btns">
-        <button class="hdr-pom-btn" id="hdr-pom-start" onclick="pomToggle()" title="Start/Pause">▶</button>
-        <button class="hdr-pom-btn" onclick="pomReset()" title="Reset">↺</button>
-        <button class="hdr-pom-btn" onclick="pomOpenEdit(this)" title="Edit">✎</button>
-      </div>
-    `;
-    const saveStatus = document.getElementById('save-status');
-    headerRight.insertBefore(pomDiv, saveStatus);
+    pomDiv.id = 'pom-header-section'; pomDiv.className = 'hdr-pom-section';
+    pomDiv.innerHTML = `<div class="hdr-pom-inner"><div class="hdr-pom-time" id="hdr-pom-time">45:00</div><div class="hdr-pom-phase" id="hdr-pom-phase">Work</div></div><div class="hdr-pom-btns"><button class="hdr-pom-btn" id="hdr-pom-start" onclick="pomToggle()" title="Start/Pause">▶</button><button class="hdr-pom-btn" onclick="pomReset()" title="Reset">↺</button><button class="hdr-pom-btn" onclick="pomOpenEdit(this)" title="Edit">✎</button></div>`;
+    headerRight.insertBefore(pomDiv, document.getElementById('save-status'));
   }
 }
 
@@ -1007,91 +671,61 @@ function ensureHeaderWidgets(info) {
 async function spPlayPause() {
   if (!spToken) return;
   if (spPlayer) { spPlayer.togglePlay(); return; }
-  const state = await fetch('https://api.spotify.com/v1/me/player', {
-    headers: { 'Authorization': `Bearer ${spToken}` }
-  }).then(r => r.json()).catch(() => null);
-  const endpoint = state?.is_playing ? 'pause' : 'play';
-  await fetch(`https://api.spotify.com/v1/me/player/${endpoint}`, {
-    method: 'PUT',
-    headers: { 'Authorization': `Bearer ${spToken}` },
-    body: spDeviceId ? JSON.stringify({ device_id: spDeviceId }) : undefined,
-  });
+  const state = await fetch('https://api.spotify.com/v1/me/player', { headers: { 'Authorization': `Bearer ${spToken}` } }).then(r => r.json()).catch(() => null);
+  await fetch(`https://api.spotify.com/v1/me/player/${state?.is_playing ? 'pause' : 'play'}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${spToken}` }, body: spDeviceId ? JSON.stringify({ device_id: spDeviceId }) : undefined });
   setTimeout(fetchNowPlaying, 500);
 }
 
 async function spNext() {
   if (!spToken) return;
   if (spPlayer) { spPlayer.nextTrack(); return; }
-  await fetch('https://api.spotify.com/v1/me/player/next', {
-    method: 'POST', headers: { 'Authorization': `Bearer ${spToken}` }
-  });
-  spCurrentTrack = null;
-  setTimeout(fetchNowPlaying, 500);
+  await fetch('https://api.spotify.com/v1/me/player/next', { method: 'POST', headers: { 'Authorization': `Bearer ${spToken}` } });
+  spCurrentTrack = null; setTimeout(fetchNowPlaying, 500);
 }
 
 async function spPrev() {
   if (!spToken) return;
   if (spPlayer) { spPlayer.previousTrack(); return; }
-  await fetch('https://api.spotify.com/v1/me/player/previous', {
-    method: 'POST', headers: { 'Authorization': `Bearer ${spToken}` }
-  });
-  spCurrentTrackUri = null;
-  setTimeout(fetchNowPlaying, 500);
+  await fetch('https://api.spotify.com/v1/me/player/previous', { method: 'POST', headers: { 'Authorization': `Bearer ${spToken}` } });
+  spCurrentTrackUri = null; setTimeout(fetchNowPlaying, 500);
 }
 
 async function spToggleShuffle() {
   if (!spToken) return;
   const newState = !spShuffleState;
-  await fetch('https://api.spotify.com/v1/me/player/shuffle?state=' + newState, {
-    method: 'PUT', headers: { 'Authorization': `Bearer ${spToken}` }
-  });
-  spShuffleState = newState;
-  updateShuffleRepeatButtons();
+  await fetch('https://api.spotify.com/v1/me/player/shuffle?state=' + newState, { method: 'PUT', headers: { 'Authorization': `Bearer ${spToken}` } });
+  spShuffleState = newState; updateShuffleRepeatButtons();
 }
 
 async function spCycleRepeat() {
   if (!spToken) return;
-  const cycle    = { 'off': 'context', 'context': 'track', 'track': 'off' };
-  const newState = cycle[spRepeatState] || 'off';
-  await fetch('https://api.spotify.com/v1/me/player/repeat?state=' + newState, {
-    method: 'PUT', headers: { 'Authorization': `Bearer ${spToken}` }
-  });
-  spRepeatState = newState;
-  updateShuffleRepeatButtons();
+  const newState = { 'off': 'context', 'context': 'track', 'track': 'off' }[spRepeatState] || 'off';
+  await fetch('https://api.spotify.com/v1/me/player/repeat?state=' + newState, { method: 'PUT', headers: { 'Authorization': `Bearer ${spToken}` } });
+  spRepeatState = newState; updateShuffleRepeatButtons();
 }
 
 // ── Add-to-playlist mode ──────────────────────────────────
 function spToggleAddMode() {
   spAddMode = !spAddMode;
-  document.querySelectorAll('.sp-save-btn').forEach(btn => {
-    btn.classList.toggle('active', spAddMode);
-    btn.innerHTML = svgAddToPlaylist(spAddMode);
-  });
-  const panel  = document.getElementById('sp-playlists-list');
+  document.querySelectorAll('.sp-save-btn').forEach(btn => { btn.classList.toggle('active', spAddMode); btn.innerHTML = svgAddToPlaylist(spAddMode); });
+  const panel = document.getElementById('sp-playlists-list');
   const banner = document.getElementById('sp-add-banner');
-
   if (spAddMode) {
     if (panel && !banner) {
       const b = document.createElement('div');
       b.id = 'sp-add-banner';
-      b.style.cssText = 'background:var(--accent);color:#fff;font-family:var(--font-mono);font-size:.68rem;' +
-        'padding:.35rem .6rem;border-radius:var(--r-sm);margin-bottom:.4rem;display:flex;align-items:center;justify-content:space-between';
-      b.innerHTML = '<span>Tap a playlist to add this track</span>' +
-        '<button onclick="spToggleAddMode()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:.9rem">×</button>';
+      b.style.cssText = 'background:var(--accent);color:#fff;font-family:var(--font-mono);font-size:.68rem;padding:.35rem .6rem;border-radius:var(--r-sm);margin-bottom:.4rem;display:flex;align-items:center;justify-content:space-between';
+      b.innerHTML = '<span>Tap a playlist to add this track</span><button onclick="spToggleAddMode()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:.9rem">×</button>';
       panel.insertBefore(b, panel.firstChild);
     }
     document.querySelectorAll('.sp-playlist-row').forEach(row => {
-      row.onclick = () => {
-        spAddToPlaylist(row.dataset.uri || '', row.querySelector('.sp-playlist-name').textContent);
-        spToggleAddMode();
-      };
+      row.onclick = () => { spAddToPlaylist(row.dataset.uri || '', row.querySelector('.sp-playlist-name').textContent); spToggleAddMode(); };
     });
     setFocusRight('playlists');
   } else {
     if (banner) banner.remove();
     document.querySelectorAll('.sp-playlist-row').forEach(row => {
-      const uri  = row.dataset.uri;
-      const name = row.querySelector('.sp-playlist-name')?.textContent || '';
+      const uri = row.dataset.uri; const name = row.querySelector('.sp-playlist-name')?.textContent || '';
       row.onclick = () => playSpotifyPlaylist(uri, name);
     });
   }
@@ -1101,83 +735,46 @@ async function spAddToPlaylist(playlistUri, playlistName) {
   if (!spToken || !spCurrentTrackUri) return;
   const playlistId = playlistUri.split(':')[2];
   if (!playlistId) return;
-  const resp = await fetch('https://api.spotify.com/v1/playlists/' + playlistId + '/tracks', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + spToken, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ uris: [spCurrentTrackUri] })
-  });
+  const doPost = () => fetch('https://api.spotify.com/v1/playlists/' + playlistId + '/tracks', { method: 'POST', headers: { 'Authorization': 'Bearer ' + spToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ uris: [spCurrentTrackUri] }) });
+  let resp = await doPost();
   if (resp.status === 401 || resp.status === 403) {
     const refreshed = await refreshSpotifyToken();
-    if (refreshed) {
-      const retry = await fetch('https://api.spotify.com/v1/playlists/' + playlistId + '/tracks', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + spToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uris: [spCurrentTrackUri] })
-      });
-      showToast(retry.ok ? ('Added to ' + playlistName) : 'Could not add track — try again', 2200);
-      return;
-    }
+    if (refreshed) { resp = await doPost(); showToast(resp.ok ? ('Added to ' + playlistName) : 'Could not add track — try again', 2200); return; }
     localStorage.setItem('sp_pending_add', JSON.stringify({ playlistUri, playlistName, trackUri: spCurrentTrackUri }));
-    showToast('Re-authorising Spotify…', 2500);
-    setTimeout(() => spotifyLogin(), 1200);
-    return;
+    showToast('Re-authorising Spotify…', 2500); setTimeout(() => spotifyLogin(), 1200); return;
   }
   showToast(resp.ok ? ('Added to ' + playlistName) : 'Could not add track — try again', 2200);
 }
 
-// ── Toast ─────────────────────────────────────────────────
-
-// ── Last played fallback (shown when nothing is currently playing) ────
+// ── Last played fallback ──────────────────────────────────
 async function fetchLastPlayed() {
   if (!spToken) return;
   try {
-    let resp = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=1', {
-      headers: { 'Authorization': `Bearer ${spToken}` }
-    });
-    if (resp.status === 401) {
-      const ok = await refreshSpotifyToken();
-      if (!ok) return;
-      resp = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=1', {
-        headers: { 'Authorization': `Bearer ${spToken}` }
-      });
-    }
+    let resp = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=1', { headers: { 'Authorization': `Bearer ${spToken}` } });
+    if (resp.status === 401) { const ok = await refreshSpotifyToken(); if (!ok) return; resp = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=1', { headers: { 'Authorization': `Bearer ${spToken}` } }); }
     if (!resp.ok) return;
     const data = await resp.json();
     const item = data.items?.[0]?.track;
     if (!item) return;
-
+    // Only write if still in last-played state (don't clobber a live track)
+    if (!spShowingLastPlayed) return;
     const container = document.getElementById('sp-main-content');
     if (!container) return;
-
-    const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
     container.innerHTML = `
       <div style="position:relative">
-        <img class="sp-art-lg" src="${escH(item.album?.images?.[0]?.url || '')}" alt="${escH(item.name)}"
-             onerror="this.style.background='var(--bg-elevated)'">
-        <div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.55);color:#fff;
-                    font-family:var(--font-mono);font-size:.58rem;padding:2px 7px;border-radius:3px;letter-spacing:.04em">
-          LAST PLAYED
-        </div>
+        <img class="sp-art-lg" src="${escH(item.album?.images?.[0]?.url || '')}" alt="${escH(item.name)}" onerror="this.style.background='var(--bg-elevated)'">
+        <div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.55);color:#fff;font-family:var(--font-mono);font-size:.58rem;padding:2px 7px;border-radius:3px;letter-spacing:.04em">LAST PLAYED</div>
       </div>
       <div class="sp-track-lg">${escH(item.name)}</div>
       <div class="sp-artist-lg">${escH(item.artists?.map(a => a.name).join(', ') || '')}</div>
-      <div class="sp-idle" style="padding:.6rem 0 .3rem;font-size:.68rem">Nothing playing · Play something in Spotify to see live controls</div>
-      <button class="sp-connect-btn" onclick="spotifyLogin()"
-        style="background:var(--bg-elevated);border:1px solid var(--border);color:var(--accent-text);margin-top:.3rem">
-        ↻ Reconnect
-      </button>
-    `;
-  } catch(e) {
-    console.warn('fetchLastPlayed:', e);
-  }
+      <div class="sp-idle" style="padding:.6rem 0 .3rem;font-size:.68rem">Nothing playing · click a playlist to start</div>`;
+  } catch(e) { console.warn('fetchLastPlayed:', e); }
 }
 
+// ── Toast ─────────────────────────────────────────────────
 function showToast(text, duration) {
   const msg = document.createElement('div');
-  msg.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg-card);' +
-    'border:1px solid var(--border-bright);color:var(--text-primary);font-family:var(--font-mono);font-size:.75rem;' +
-    'padding:.45rem 1rem;border-radius:999px;z-index:9000;pointer-events:none;opacity:1;transition:opacity .4s;' +
-    'white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.15)';
+  msg.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg-card);border:1px solid var(--border-bright);color:var(--text-primary);font-family:var(--font-mono);font-size:.75rem;padding:.45rem 1rem;border-radius:999px;z-index:9000;pointer-events:none;opacity:1;transition:opacity .4s;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.15)';
   msg.textContent = text;
   document.body.appendChild(msg);
   setTimeout(() => { msg.style.opacity='0'; setTimeout(()=>msg.remove(), 400); }, duration || 2200);
