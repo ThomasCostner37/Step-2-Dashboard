@@ -16,6 +16,7 @@ const SPOTIFY_SCOPES      = [
   'playlist-modify-public',
   'playlist-modify-private',
   'user-library-modify',
+  'user-library-read',
 ].join(' ');
 
 let spToken        = null;
@@ -29,11 +30,17 @@ let spLastProgress     = 0;
 let spLastDuration     = 0;
 let spIsPlaying        = false;
 let spShuffleState     = false;
-let spRepeatState      = 'off';   // 'off' | 'context' | 'track'
+let spRepeatState      = 'off';
 let spCurrentTrackUri  = null;
 let spAddMode          = false;
+let spIsLiked          = false;
+let spVibeActive       = false;
+let spVibeCtx          = null;
+let spVibeAnalyser     = null;
+let spVibeSource       = null;
+let spVibeRaf          = null;
 
-// ── Expanded quotes ──────────────────────────────────────
+// ── Quotes ────────────────────────────────────────────────
 const ALL_QUOTES = [
   { text:"The difference between the impossible and the possible lies in a person's determination.", attr:"Tommy Lasorda" },
   { text:"You have to fight to reach your dream. You have to sacrifice and work hard for it.", attr:"Lionel Messi" },
@@ -66,9 +73,7 @@ const ALL_QUOTES = [
   { text:"We suffer more in imagination than in reality.", attr:"Seneca" },
   { text:"It does not matter how slowly you go as long as you do not stop.", attr:"Confucius" },
   { text:"I hated every minute of training, but I said: don't quit. Suffer now and live the rest of your life as a champion.", attr:"Muhammad Ali" },
-  { text:"If you're not tired, you're not working hard enough.", attr:"Anonymous" },
   { text:"The only person you are destined to become is the person you decide to be.", attr:"Ralph Waldo Emerson" },
-  { text:"Do not go where the path may lead; go instead where there is no path and leave a trail.", attr:"Ralph Waldo Emerson" },
   { text:"Talent is cheaper than table salt. What separates the talented individual from the successful one is hard work.", attr:"Stephen King" },
   { text:"Great works are performed not by strength but by perseverance.", attr:"Samuel Johnson" },
   { text:"The secret of getting ahead is getting started.", attr:"Mark Twain" },
@@ -77,10 +82,74 @@ const ALL_QUOTES = [
   { text:"I am not a product of my circumstances. I am a product of my decisions.", attr:"Stephen Covey" },
 ];
 
-let focusQuoteIdx = Math.floor(Math.random() * ALL_QUOTES.length);
+let focusQuoteIdx   = Math.floor(Math.random() * ALL_QUOTES.length);
 let focusQuoteTimer = null;
-let focusRightMode = 'playlists';
+let focusRightMode  = 'playlists';
 
+// ── SVG icon helpers (Spotify-style) ─────────────────────
+function svgShuffle(active) {
+  const c = active ? '#1DB954' : 'currentColor';
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="16 3 21 3 21 8"></polyline>
+    <line x1="4" y1="20" x2="21" y2="3"></line>
+    <polyline points="21 16 21 21 16 21"></polyline>
+    <line x1="15" y1="15" x2="21" y2="21"></line>
+  </svg>`;
+}
+
+function svgRepeat(state) {
+  const c = state !== 'off' ? '#1DB954' : 'currentColor';
+  if (state === 'track') {
+    return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="17 1 21 5 17 9"></polyline>
+      <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+      <polyline points="7 23 3 19 7 15"></polyline>
+      <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+      <text x="10" y="14" font-size="7" fill="${c}" stroke="none" font-weight="bold">1</text>
+    </svg>`;
+  }
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="17 1 21 5 17 9"></polyline>
+    <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+    <polyline points="7 23 3 19 7 15"></polyline>
+    <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+  </svg>`;
+}
+
+function svgHeart(filled) {
+  return filled
+    ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="#1DB954" stroke="#1DB954" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+       </svg>`
+    : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+       </svg>`;
+}
+
+function svgAddToPlaylist() {
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="12" y1="5" x2="12" y2="19"></line>
+    <line x1="5" y1="12" x2="19" y2="12"></line>
+    <line x1="3" y1="6" x2="15" y2="6"></line>
+    <line x1="3" y1="10" x2="10" y2="10"></line>
+    <line x1="3" y1="14" x2="10" y2="14"></line>
+    <line x1="3" y1="18" x2="10" y2="18"></line>
+  </svg>`;
+}
+
+function svgVibe(active) {
+  const c = active ? '#C9913A' : 'currentColor';
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 18V5l12-2v13"></path>
+    <circle cx="6" cy="18" r="3"></circle>
+    <circle cx="18" cy="16" r="3"></circle>
+    <line x1="6" y1="6" x2="6" y2="9" stroke="${c}"></line>
+    <line x1="10" y1="5" x2="10" y2="8" stroke="${c}"></line>
+    <line x1="14" y1="4" x2="14" y2="7" stroke="${c}"></line>
+  </svg>`;
+}
+
+// ── Inject tab ────────────────────────────────────────────
 function injectSpotifyTab() {
   const tabBar = document.querySelector('.tab-bar');
   const app    = document.getElementById('app');
@@ -98,7 +167,6 @@ function injectSpotifyTab() {
     panel.id = 'tab-focus'; panel.className = 'tab-panel';
     panel.innerHTML = `
       <div class="focus-tab-grid">
-
         <!-- NOW PLAYING -->
         <div class="sp-card">
           <div class="dash-head" style="margin-bottom:.85rem">
@@ -106,16 +174,12 @@ function injectSpotifyTab() {
           </div>
           <div id="sp-main-content">
             <div class="sp-idle">Not connected to Spotify</div>
-            <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">
-              Connect Spotify
-            </button>
+            <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Connect Spotify</button>
           </div>
         </div>
 
-        <!-- RIGHT PANEL: POMODORO (top) + PLAYLISTS/QUOTES (bottom) -->
+        <!-- RIGHT PANEL -->
         <div class="pom-card">
-
-          <!-- POMODORO -->
           <div style="margin-bottom:1.1rem">
             <div class="dash-title" style="margin-bottom:.6rem">Pomodoro</div>
             <div class="pom-display" style="margin:.4rem 0 .7rem">
@@ -131,7 +195,6 @@ function injectSpotifyTab() {
 
           <div style="height:1px;background:var(--border);margin-bottom:1rem"></div>
 
-          <!-- PLAYLISTS / QUOTES TOGGLE -->
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.7rem">
             <div class="dash-title" id="focus-right-title">Playlists</div>
             <div style="display:flex;gap:3px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--r-sm);padding:3px">
@@ -140,47 +203,44 @@ function injectSpotifyTab() {
             </div>
           </div>
 
-          <!-- Playlists panel -->
           <div id="focus-playlists-panel" style="flex:1;overflow-y:auto;min-height:0">
+            <input id="sp-playlist-search" class="input" placeholder="Search playlists…"
+              style="width:100%;margin-bottom:.5rem;font-size:.78rem;padding:.3rem .5rem;box-sizing:border-box"
+              oninput="filterPlaylists(this.value)">
             <div id="sp-playlists-list">
               <div class="sp-idle" style="padding:1rem 0">Connect Spotify to see your playlists</div>
             </div>
           </div>
 
-          <!-- Quotes panel -->
           <div id="focus-quotes-panel" style="display:none;flex-direction:column;flex:1;min-height:0">
             <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:1rem 0">
               <div id="focus-quote-text" style="font-family:var(--font-display);font-style:italic;font-size:1.45rem;color:var(--text-secondary);line-height:1.75;transition:opacity .5s ease;margin-bottom:1rem;text-align:center"></div>
               <div id="focus-quote-attr" style="font-family:var(--font-mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);transition:opacity .5s ease;text-align:center"></div>
             </div>
-            <div class="quote-nav-btns" style="display:flex;gap:8px;justify-content:center;padding-bottom:.5rem;opacity:0;transition:opacity .2s">
+            <div class="quote-nav-btns" style="display:flex;gap:8px;justify-content:center;padding-bottom:.5rem">
               <button class="btn btn-ghost btn-sm" onclick="prevFocusQuote()">‹ Prev</button>
               <button class="btn btn-ghost btn-sm" onclick="nextFocusQuote()">Next ›</button>
             </div>
           </div>
         </div>
-
       </div>
+      <!-- Vibe canvas — behind everything, covers focus tab -->
+      <canvas id="sp-vibe-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0;transition:opacity 1.2s ease;display:none"></canvas>
     `;
     app.appendChild(panel);
   }
 
-  // Ensure pomodoro header + edit popover are always initialized
-  // (even before Spotify connects, so the Edit button on the Focus tab works)
   ensureHeaderWidgets();
-
-  // Pin the right card's height to the left card so playlists scroll inside it
   observeFocusCardHeight();
 }
 
-// ── Match right (pom) card height to left (now-playing) card ──
+// ── Card height sync ──────────────────────────────────────
 var _focusCardRO = null;
 function syncFocusCardHeights() {
   var sp  = document.querySelector('#tab-focus .sp-card');
   var pom = document.querySelector('#tab-focus .pom-card');
   if (!sp || !pom) return;
   if (window.innerWidth <= 700) { pom.style.height = ''; return; }
-  // Cap at viewport minus chrome (header 76 + tabbar 60 + bottom padding 80)
   var maxH = window.innerHeight - 216;
   var h    = Math.min(sp.offsetHeight, maxH);
   pom.style.height = h + 'px';
@@ -195,7 +255,6 @@ function observeFocusCardHeight() {
     _focusCardRO.observe(sp);
   }
   window.addEventListener('resize', syncFocusCardHeights);
-  // Initial sync (after layout settles)
   requestAnimationFrame(syncFocusCardHeights);
 }
 
@@ -254,123 +313,90 @@ function resetFocusQuoteTimer() {
   focusQuoteTimer = setInterval(nextFocusQuote, 10000);
 }
 
-// ── Playlists ─────────────────────────────────────────────
+// ── Playlist search filter ────────────────────────────────
+let _allPlaylists = [];
+
+function filterPlaylists(q) {
+  const container = document.getElementById('sp-playlists-list');
+  if (!container || !_allPlaylists.length) return;
+  const term = q.trim().toLowerCase();
+  const filtered = term ? _allPlaylists.filter(pl => pl.name.toLowerCase().includes(term)) : _allPlaylists;
+  renderPlaylistRows(filtered, container);
+}
+
+function renderPlaylistRows(playlists, container) {
+  container.innerHTML = '';
+  if (!playlists.length) {
+    container.innerHTML = '<div class="sp-idle" style="padding:.5rem 0">No playlists match</div>';
+    return;
+  }
+  playlists.forEach(pl => {
+    if (!pl) return;
+    const img = pl.images?.[0]?.url || '';
+    const div = document.createElement('div');
+    div.className = 'sp-playlist-row';
+    div.onmouseenter = () => { div.style.background = 'var(--bg-elevated)'; div.style.borderColor = 'var(--border)'; };
+    div.onmouseleave = () => { div.style.background = ''; div.style.borderColor = 'transparent'; };
+    div.innerHTML = `
+      ${img
+        ? `<img src="${escH(img)}" style="width:38px;height:38px;border-radius:4px;object-fit:cover;flex-shrink:0">`
+        : '<div style="width:38px;height:38px;border-radius:4px;background:var(--bg-elevated);flex-shrink:0"></div>'
+      }
+      <div class="sp-playlist-meta">
+        <div class="sp-playlist-name">${escH(pl.name)}</div>
+        <div class="sp-playlist-count">${pl.owner ? pl.owner.display_name || '' : ''}</div>
+      </div>
+      <div class="sp-playlist-play">▶</div>
+    `;
+    div.dataset.uri = pl.uri;
+    div.onclick = () => playSpotifyPlaylist(pl.uri, pl.name);
+    container.appendChild(div);
+  });
+
+  if (spAddMode) {
+    container.querySelectorAll('.sp-playlist-row').forEach(row => {
+      row.onclick = () => {
+        spAddToPlaylist(row.dataset.uri || '', row.querySelector('.sp-playlist-name').textContent);
+        spToggleAddMode();
+      };
+    });
+  }
+}
+
+// ── Playlists fetch ───────────────────────────────────────
 async function fetchSpotifyPlaylists() {
   if (!spToken) return;
-
   const container = document.getElementById('sp-playlists-list');
   if (!container) return;
-
   container.innerHTML = '<div class="sp-idle" style="padding:.5rem 0">Loading playlists…</div>';
 
   try {
-    let resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=20', {
+    let resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=50', {
       headers: { Authorization: `Bearer ${spToken}` }
     });
 
     if (resp.status === 401) {
       const ok = await refreshSpotifyToken();
       if (!ok) {
-        container.innerHTML = `
-          <div class="sp-idle" style="padding:.8rem 0">
-            Spotify session expired.
-          </div>
-          <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">
-            Reconnect Spotify
-          </button>
-        `;
+        container.innerHTML = `<div class="sp-idle">Session expired.</div><button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Reconnect</button>`;
         return;
       }
-
-      resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=20', {
+      resp = await fetch('https://api.spotify.com/v1/me/playlists?limit=50', {
         headers: { Authorization: `Bearer ${spToken}` }
       });
     }
 
     if (!resp.ok) {
-      const errText = await resp.text().catch(() => '');
-      container.innerHTML = `
-        <div class="sp-idle" style="padding:.8rem 0">
-          Playlists could not load.<br>
-          <span style="font-size:.62rem;color:var(--text-tertiary)">
-            Spotify ${resp.status}${errText ? ': ' + escH(errText.slice(0,120)) : ''}
-          </span>
-        </div>
-        <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">
-          Reconnect Spotify
-        </button>
-      `;
+      container.innerHTML = `<div class="sp-idle">Could not load playlists (${resp.status})</div>`;
       return;
     }
 
     const data = await resp.json();
-
-    if (!data.items?.length) {
-      container.innerHTML = '<div class="sp-idle" style="padding:.5rem 0">No playlists found</div>';
-      return;
-    }
-
-    container.innerHTML = '';
-
-    data.items.forEach(pl => {
-      if (!pl) return;
-
-      const img = pl.images?.[0]?.url || '';
-      const div = document.createElement('div');
-
-      div.className = 'sp-playlist-row';
-
-      div.onmouseenter = () => {
-        div.style.background = 'var(--bg-elevated)';
-        div.style.borderColor = 'var(--border)';
-      };
-
-      div.onmouseleave = () => {
-        div.style.background = '';
-        div.style.borderColor = 'transparent';
-      };
-
-      div.innerHTML = `
-      ${
-      img
-      ? `<img src="${escH(img)}" style="width:38px;height:38px;border-radius:4px;object-fit:cover;flex-shrink:0">`
-      : '<div style="width:38px;height:38px;border-radius:4px;background:var(--bg-elevated);flex-shrink:0"></div>'
-      }
-      <div class="sp-playlist-meta">
-      <div class="sp-playlist-name">${escH(pl.name)}</div>
-      <div class="sp-playlist-count">${pl.owner ? pl.owner.display_name || "" : ""}</div>
-     </div>
-      <div class="sp-playlist-play">▶</div>
-      `;
-
-      div.dataset.uri = pl.uri;
-      div.onclick = () => playSpotifyPlaylist(pl.uri, pl.name);
-      container.appendChild(div);
-    });
-
-    // If add mode was active when playlists reloaded, re-apply add handlers
-    if (spAddMode) {
-      document.querySelectorAll('.sp-playlist-row').forEach(function(row) {
-        row.onclick = function() {
-          spAddToPlaylist(row.dataset.uri || '', row.querySelector('.sp-playlist-name').textContent);
-          spToggleAddMode();
-        };
-      });
-    }
-  } catch (e) {
+    _allPlaylists = (data.items || []).filter(Boolean);
+    renderPlaylistRows(_allPlaylists, container);
+  } catch(e) {
     console.warn('Playlists fetch:', e);
-
-    container.innerHTML = `
-      <div class="sp-idle" style="padding:.8rem 0">
-        Playlists could not load.<br>
-        <span style="font-size:.62rem;color:var(--text-tertiary)">
-          ${escH(String(e))}
-        </span>
-      </div>
-      <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">
-        Reconnect Spotify
-      </button>
-    `;
+    container.innerHTML = `<div class="sp-idle">Could not load playlists</div>`;
   }
 }
 
@@ -390,7 +416,7 @@ async function playSpotifyPlaylist(uri, name) {
   }
 }
 
-// ── Spotify Auth (PKCE) ───────────────────────────────────
+// ── Auth (PKCE) ───────────────────────────────────────────
 function spotifyLogin() {
   const verifier = generateCodeVerifier(128);
   localStorage.setItem('sp_verifier', verifier);
@@ -414,8 +440,8 @@ function generateCodeVerifier(length) {
 }
 
 async function generateCodeChallenge(verifier) {
-  const data    = new TextEncoder().encode(verifier);
-  const digest  = await crypto.subtle.digest('SHA-256', data);
+  const data   = new TextEncoder().encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
   return btoa(String.fromCharCode(...new Uint8Array(digest)))
     .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
@@ -445,7 +471,6 @@ async function exchangeSpotifyCode(code) {
     startSpotifyPoll();
     setTimeout(fetchSpotifyPlaylists, 1500);
 
-    // Execute any pending add-to-playlist that triggered this re-auth
     const pending = localStorage.getItem('sp_pending_add');
     if (pending) {
       localStorage.removeItem('sp_pending_add');
@@ -461,7 +486,7 @@ async function exchangeSpotifyCode(code) {
           });
           showToast(r.ok ? ('Added to ' + playlistName) : 'Could not add track — try again', 2500);
         }, 2000);
-      } catch(e) { /* malformed pending, ignore */ }
+      } catch(e) {}
     }
   }
 }
@@ -491,23 +516,19 @@ async function refreshSpotifyToken() {
 function initSpotify() {
   const params = new URLSearchParams(window.location.search);
   const code   = params.get('code');
-  if (code) {
-    exchangeSpotifyCode(code);
-    return;
-  }
+  if (code) { exchangeSpotifyCode(code); return; }
 
   const saved = localStorage.getItem('sp_token');
   if (saved) {
     spToken = saved;
     initSpotifyPlayer();
     startSpotifyPoll();
-    // Playlists will also be fetched by startSpotifyPoll
   }
 
   if (!window.Spotify && !document.getElementById('sp-sdk')) {
-    const script    = document.createElement('script');
-    script.id       = 'sp-sdk';
-    script.src      = 'https://sdk.scdn.co/spotify-player.js';
+    const script  = document.createElement('script');
+    script.id     = 'sp-sdk';
+    script.src    = 'https://sdk.scdn.co/spotify-player.js';
     document.head.appendChild(script);
   }
 }
@@ -525,61 +546,49 @@ function initSpotifyPlayer() {
     getOAuthToken: cb => cb(spToken),
     volume: 0.8,
   });
-
   spPlayer.addListener('ready', ({ device_id }) => {
     spDeviceId = device_id;
-    console.log('Spotify player ready:', device_id);
   });
-
   spPlayer.addListener('player_state_changed', state => {
     if (!state) return;
     updateNowPlayingFromSDK(state);
   });
-
   spPlayer.addListener('authentication_error', async () => {
     const ok = await refreshSpotifyToken();
     if (ok) initSpotifyPlayer();
   });
-
   spPlayer.connect();
 }
 
-// ── Now Playing ───────────────────────────────────────────
+// ── Polling ───────────────────────────────────────────────
 function startSpotifyPoll() {
   clearInterval(spPollTimer);
   clearInterval(spInterpolateTimer);
   fetchNowPlaying();
   fetchSpotifyPlaylists();
   spPollTimer = setInterval(fetchNowPlaying, 10000);
-  // Interpolate progress every second between polls — drives the bar smoothly
   spInterpolateTimer = setInterval(() => {
     if (!spIsPlaying || !spLastDuration) return;
-    const elapsed = Date.now() - spLastPollTime;
+    const elapsed      = Date.now() - spLastPollTime;
     const interpolated = Math.min(spLastProgress + elapsed, spLastDuration);
-    const pct = (interpolated / spLastDuration) * 100;
-    // Update bar directly — no transition in CSS, so this is already smooth at 1s
+    const pct          = (interpolated / spLastDuration) * 100;
     const bar = document.querySelector('.sp-progress-bar');
     if (bar) bar.style.width = pct.toFixed(2) + '%';
-    // Update elapsed time display
     const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
-    // Target only the first sp-time-row span (elapsed), not duration
-    const timeRows = document.querySelectorAll('.sp-time-row');
-    timeRows.forEach(row => {
+    document.querySelectorAll('.sp-time-row').forEach(row => {
       const span = row.querySelector('span:first-child');
       if (span) span.textContent = fmt(interpolated);
     });
   }, 1000);
 }
 
-// ── FIXED: fetchNowPlaying only re-renders DOM when track changes ──────────
 async function fetchNowPlaying() {
   if (!spToken) return;
   try {
-    // Use /me/player to get shuffle + repeat state alongside current track
     const resp = await fetch('https://api.spotify.com/v1/me/player', {
       headers: { 'Authorization': `Bearer ${spToken}` }
     });
-    if (resp.status === 204 || resp.status === 200 && resp.headers.get('content-length') === '0') {
+    if (resp.status === 204 || (resp.status === 200 && resp.headers.get('content-length') === '0')) {
       renderNowPlaying(null); return;
     }
     if (resp.status === 401) {
@@ -592,7 +601,6 @@ async function fetchNowPlaying() {
     const data = await resp.json();
     if (!data || !data.item) { renderNowPlaying(null); return; }
 
-    // Sync shuffle + repeat state
     const prevShuffle = spShuffleState;
     const prevRepeat  = spRepeatState;
     spShuffleState = data.shuffle_state || false;
@@ -601,15 +609,17 @@ async function fetchNowPlaying() {
       updateShuffleRepeatButtons();
     }
 
-    const prevUri = spCurrentTrackUri;
-    spCurrentTrack = data;
+    const prevUri     = spCurrentTrackUri;
+    spCurrentTrack    = data;
     spCurrentTrackUri = data.item.uri;
-    spLastProgress = data.progress_ms || 0;
-    spLastDuration = data.item.duration_ms || 0;
-    spLastPollTime = Date.now();
-    spIsPlaying    = data.is_playing;
+    spLastProgress    = data.progress_ms || 0;
+    spLastDuration    = data.item.duration_ms || 0;
+    spLastPollTime    = Date.now();
+    spIsPlaying       = data.is_playing;
 
     if (spCurrentTrackUri !== prevUri || prevUri === null) {
+      // New track — check liked state then full render
+      checkLikedState(data.item.uri);
       renderNowPlaying(data);
     } else {
       updatePlayPauseButtons(spIsPlaying);
@@ -617,21 +627,92 @@ async function fetchNowPlaying() {
   } catch(e) { console.warn('Spotify poll:', e); }
 }
 
-// Lightweight: only update play/pause button icon + green dot — no DOM rebuild
+// ── Like / Unlike ─────────────────────────────────────────
+async function checkLikedState(trackUri) {
+  if (!spToken || !trackUri) return;
+  const id = trackUri.split(':')[2];
+  if (!id) return;
+  try {
+    const resp = await fetch(`https://api.spotify.com/v1/me/tracks/contains?ids=${id}`, {
+      headers: { 'Authorization': `Bearer ${spToken}` }
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    spIsLiked = Array.isArray(data) ? data[0] : false;
+    updateLikeButton();
+  } catch(e) {}
+}
+
+async function spToggleLike() {
+  if (!spToken || !spCurrentTrackUri) return;
+  const id = spCurrentTrackUri.split(':')[2];
+  if (!id) return;
+  const method = spIsLiked ? 'DELETE' : 'PUT';
+  try {
+    await fetch(`https://api.spotify.com/v1/me/tracks?ids=${id}`, {
+      method,
+      headers: { 'Authorization': `Bearer ${spToken}` }
+    });
+    spIsLiked = !spIsLiked;
+    updateLikeButton();
+    showToast(spIsLiked ? 'Saved to Liked Songs' : 'Removed from Liked Songs', 2000);
+  } catch(e) {}
+}
+
+function updateLikeButton() {
+  document.querySelectorAll('.sp-like-btn').forEach(btn => {
+    btn.innerHTML = svgHeart(spIsLiked);
+    btn.title = spIsLiked ? 'Remove from Liked Songs' : 'Save to Liked Songs';
+    btn.style.color = spIsLiked ? '#1DB954' : '';
+  });
+}
+
+// ── Seekable progress bar ─────────────────────────────────
+function spSeek(e) {
+  if (!spToken || !spLastDuration) return;
+  const wrap = e.currentTarget;
+  const rect = wrap.getBoundingClientRect();
+  const pct  = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const posMs = Math.floor(pct * spLastDuration);
+  // Optimistic update
+  spLastProgress = posMs;
+  spLastPollTime = Date.now();
+  const bar = wrap.querySelector('.sp-progress-bar');
+  if (bar) bar.style.width = (pct * 100).toFixed(2) + '%';
+  fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${posMs}`, {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${spToken}` }
+  }).catch(() => {});
+}
+
+// ── Playback buttons (lightweight update, no re-render) ───
 function updatePlayPauseButtons(isPlaying) {
-  const icon = isPlaying ? '⏸' : '▶';
+  const icon  = isPlaying ? '⏸' : '▶';
   const title = isPlaying ? 'Pause' : 'Play';
-  const focusPlay = document.querySelector('.sp-ctrl-btn.play');
-  if (focusPlay) { focusPlay.textContent = icon; focusPlay.title = title; }
-  const hdrPlay = document.querySelector('.hdr-sp-btn.play');
-  if (hdrPlay) { hdrPlay.textContent = icon; hdrPlay.title = title; }
+  document.querySelectorAll('.sp-ctrl-btn.play').forEach(b => { b.textContent = icon; b.title = title; });
+  document.querySelectorAll('.hdr-sp-btn.play').forEach(b => { b.textContent = icon; b.title = title; });
   const dot = document.querySelector('.hdr-sp-dot');
   if (dot) dot.style.opacity = isPlaying ? '1' : '0';
 }
 
+function updateShuffleRepeatButtons() {
+  document.querySelectorAll('.sp-shuffle-btn').forEach(btn => {
+    btn.innerHTML = svgShuffle(spShuffleState);
+    btn.classList.toggle('active', spShuffleState);
+    btn.title = spShuffleState ? 'Shuffle: On' : 'Shuffle: Off';
+  });
+  document.querySelectorAll('.sp-repeat-btn').forEach(btn => {
+    btn.innerHTML = svgRepeat(spRepeatState);
+    btn.setAttribute('data-state', spRepeatState);
+    btn.classList.toggle('active', spRepeatState !== 'off');
+    btn.title = spRepeatState === 'track' ? 'Repeat: Track' : spRepeatState === 'context' ? 'Repeat: All' : 'Repeat: Off';
+  });
+}
+
+// ── SDK state update ──────────────────────────────────────
 function updateNowPlayingFromSDK(sdkState) {
   if (!sdkState || !sdkState.track_window) return;
-  const track = sdkState.track_window.current_track;
+  const track   = sdkState.track_window.current_track;
   const prevUri = spCurrentTrack?.item?.uri;
   const newUri  = track.uri;
   spLastProgress = sdkState.position || 0;
@@ -639,12 +720,12 @@ function updateNowPlayingFromSDK(sdkState) {
   spLastPollTime = Date.now();
   spIsPlaying    = !sdkState.paused;
 
-  // Same track: just sync buttons; interpolator handles bar
   if (newUri === prevUri && prevUri !== undefined) {
     updatePlayPauseButtons(spIsPlaying);
     return;
   }
 
+  checkLikedState(newUri);
   renderNowPlayingDirect({
     isPlaying:  !sdkState.paused,
     trackName:  track.name,
@@ -657,11 +738,9 @@ function updateNowPlayingFromSDK(sdkState) {
   });
 }
 
+// ── Render pipeline ───────────────────────────────────────
 function renderNowPlaying(data) {
-  if (!data || !data.item) {
-    renderNowPlayingDirect(null);
-    return;
-  }
+  if (!data || !data.item) { renderNowPlayingDirect(null); return; }
   const track = data.item;
   renderNowPlayingDirect({
     isPlaying:  data.is_playing,
@@ -685,15 +764,9 @@ function renderFocusTabNowPlaying(info) {
   if (!container) return;
 
   if (!info) {
-    if (spToken) {
-      container.innerHTML =
-        '<div class="sp-idle" style="padding:1.5rem 0">Nothing playing right now</div>' +
-        '<div class="sp-idle" style="padding:0 0 .5rem;font-size:.68rem">Pick a playlist on the right to start</div>';
-    } else {
-      container.innerHTML =
-        '<div class="sp-idle">Not connected to Spotify</div>' +
-        '<button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Connect Spotify</button>';
-    }
+    container.innerHTML = spToken
+      ? '<div class="sp-idle" style="padding:1.5rem 0">Nothing playing right now</div><div class="sp-idle" style="padding:0 0 .5rem;font-size:.68rem">Pick a playlist on the right to start</div>'
+      : '<div class="sp-idle">Not connected to Spotify</div><button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Connect Spotify</button>';
     return;
   }
 
@@ -705,14 +778,16 @@ function renderFocusTabNowPlaying(info) {
          onerror="this.style.background='var(--bg-elevated)'">
     <div class="sp-track-lg">${escH(info.trackName)}</div>
     <div class="sp-artist-lg">${escH(info.artistName)}</div>
-    <div class="sp-progress-wrap">
+
+    <div class="sp-progress-wrap" onclick="spSeek(event)" style="cursor:pointer" title="Click to seek">
       <div class="sp-progress-bar" style="width:${pct.toFixed(2)}%"></div>
     </div>
     <div class="sp-time-row">
       <span>${fmt(info.progress)}</span>
       <span>${fmt(info.duration)}</span>
     </div>
-    <div class="sp-controls" style="flex-direction:column;gap:6px">
+
+    <div class="sp-controls" style="flex-direction:column;gap:8px">
       <div style="display:flex;align-items:center;justify-content:center;gap:16px">
         <button class="sp-ctrl-btn" onclick="spPrev()" title="Previous">⏮</button>
         <button class="sp-ctrl-btn play" onclick="spPlayPause()" title="${info.isPlaying?'Pause':'Play'}">
@@ -720,28 +795,198 @@ function renderFocusTabNowPlaying(info) {
         </button>
         <button class="sp-ctrl-btn" onclick="spNext()" title="Next">⏭</button>
       </div>
-      <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:2px">
-        <button class="sp-pill-btn sp-shuffle-btn${spShuffleState ? ' active' : ''}" onclick="spToggleShuffle()">Shuffle</button>
-        <button class="sp-pill-btn sp-repeat-btn" onclick="spCycleRepeat()" data-state="${spRepeatState}">${spRepeatState === 'track' ? 'Repeat 1' : spRepeatState === 'context' ? 'Repeat All' : 'Repeat'}</button>
-        <button class="sp-pill-btn sp-save-btn" onclick="spToggleAddMode()">+ Playlist</button>
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:2px">
+        <button class="sp-icon-btn sp-shuffle-btn${spShuffleState ? ' active' : ''}"
+          onclick="spToggleShuffle()" title="${spShuffleState ? 'Shuffle: On' : 'Shuffle: Off'}">
+          ${svgShuffle(spShuffleState)}
+        </button>
+        <button class="sp-icon-btn sp-repeat-btn${spRepeatState !== 'off' ? ' active' : ''}"
+          onclick="spCycleRepeat()" data-state="${spRepeatState}"
+          title="${spRepeatState === 'track' ? 'Repeat: Track' : spRepeatState === 'context' ? 'Repeat: All' : 'Repeat: Off'}">
+          ${svgRepeat(spRepeatState)}
+        </button>
+        <button class="sp-icon-btn sp-like-btn" onclick="spToggleLike()"
+          title="${spIsLiked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}">
+          ${svgHeart(spIsLiked)}
+        </button>
+        <button class="sp-icon-btn sp-save-btn${spAddMode ? ' active' : ''}" onclick="spToggleAddMode()"
+          title="Add to playlist">
+          ${svgAddToPlaylist()}
+        </button>
+        <button class="sp-icon-btn sp-vibe-btn${spVibeActive ? ' active' : ''}" onclick="spToggleVibe()"
+          title="${spVibeActive ? 'Vibe Mode: On' : 'Vibe Mode: Off'}">
+          ${svgVibe(spVibeActive)}
+        </button>
       </div>
     </div>
   `;
-  // Sync height after art loads
+
+  // Make progress bar hover expand
+  const wrap = container.querySelector('.sp-progress-wrap');
+  if (wrap) {
+    wrap.addEventListener('mouseenter', () => { wrap.style.height = '6px'; });
+    wrap.addEventListener('mouseleave', () => { wrap.style.height = ''; });
+  }
+
   const art = container.querySelector('.sp-art-lg');
-  if (art) art.onload = function() { if (typeof syncFocusCardHeights === 'function') syncFocusCardHeights(); };
+  if (art) art.onload = () => { if (typeof syncFocusCardHeights === 'function') syncFocusCardHeights(); };
 }
 
-// ── Header widget (Spotify + Pomodoro) ───────────────────
+// ── Vibe Mode (music-reactive background) ─────────────────
+function spToggleVibe() {
+  spVibeActive = !spVibeActive;
+
+  // Update all vibe buttons
+  document.querySelectorAll('.sp-vibe-btn').forEach(btn => {
+    btn.innerHTML = svgVibe(spVibeActive);
+    btn.classList.toggle('active', spVibeActive);
+    btn.title = spVibeActive ? 'Vibe Mode: On' : 'Vibe Mode: Off';
+  });
+
+  const canvas = document.getElementById('sp-vibe-canvas');
+  if (!canvas) return;
+
+  if (spVibeActive) {
+    canvas.style.display = 'block';
+    requestAnimationFrame(() => { canvas.style.opacity = '1'; });
+    startVibeEngine(canvas);
+  } else {
+    canvas.style.opacity = '0';
+    setTimeout(() => { canvas.style.display = 'none'; }, 1200);
+    stopVibeEngine();
+  }
+}
+
+function startVibeEngine(canvas) {
+  // Try to connect to the Spotify SDK audio stream via Web Audio API
+  // Falls back to a pulse-only simulation if SDK audio isn't capturable
+  stopVibeEngine();
+
+  const ctx2d = canvas.getContext('2d');
+
+  // Attempt real audio analysis via SDK
+  let analyser = null;
+  let dataArr  = null;
+
+  if (spPlayer && window.AudioContext) {
+    try {
+      if (!spVibeCtx) spVibeCtx = new AudioContext();
+      if (spVibeCtx.state === 'suspended') spVibeCtx.resume();
+      // SDK doesn't expose its audio node directly, so we use simulation
+      // (Web Playback SDK audio runs in an internal audio context we can't capture)
+    } catch(e) {}
+  }
+
+  // Simulation engine: BPM-synced pulse using progress interpolation
+  let frame = 0;
+  let hue   = 200; // starts blue-ish, shifts over time
+  const palette = [
+    [201, 113, 58],  // amber
+    [29, 185, 84],   // spotify green
+    [100, 60, 200],  // purple
+    [220, 60, 60],   // red
+    [40, 160, 220],  // blue
+  ];
+  let paletteIdx = 0;
+  let beatPhase  = 0;
+
+  function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function tick() {
+    if (!spVibeActive) return;
+    spVibeRaf = requestAnimationFrame(tick);
+    frame++;
+
+    // Estimate beat from progress (assume ~120bpm → 500ms per beat)
+    const bpm      = 120;
+    const msPerBeat = 60000 / bpm;
+    const elapsed   = Date.now() - spLastPollTime;
+    const curPos    = spLastProgress + (spIsPlaying ? elapsed : 0);
+    beatPhase = ((curPos % msPerBeat) / msPerBeat);
+
+    // Beat pulse intensity: sharp attack, slow decay
+    const pulse = Math.pow(Math.sin(beatPhase * Math.PI), 0.3) * (spIsPlaying ? 1 : 0.2);
+
+    // Shift palette slowly
+    if (frame % 300 === 0) paletteIdx = (paletteIdx + 1) % palette.length;
+    const nextIdx = (paletteIdx + 1) % palette.length;
+    const lerp = (a, b, t) => a + (b - a) * ((frame % 300) / 300);
+    const r = Math.round(lerp(palette[paletteIdx][0], palette[nextIdx][0], (frame % 300) / 300));
+    const g = Math.round(lerp(palette[paletteIdx][1], palette[nextIdx][1], (frame % 300) / 300));
+    const b = Math.round(lerp(palette[paletteIdx][2], palette[nextIdx][2], (frame % 300) / 300));
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    // Clear with very slight trail
+    ctx2d.fillStyle = 'rgba(245, 240, 232, 0.18)';
+    ctx2d.fillRect(0, 0, W, H);
+
+    // Draw expanding rings from center on beat
+    const rings = 4;
+    for (let i = 0; i < rings; i++) {
+      const ringPhase = (beatPhase + i / rings) % 1;
+      const radius    = ringPhase * Math.max(W, H) * 0.75;
+      const alpha     = (1 - ringPhase) * pulse * 0.18;
+      ctx2d.beginPath();
+      ctx2d.arc(W / 2, H / 2, radius, 0, Math.PI * 2);
+      ctx2d.strokeStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+      ctx2d.lineWidth = 2 + (1 - ringPhase) * 4;
+      ctx2d.stroke();
+    }
+
+    // Floating particles that drift upward
+    if (frame % 4 === 0 && spIsPlaying) {
+      if (!spVibeEngineState.particles) spVibeEngineState.particles = [];
+      spVibeEngineState.particles.push({
+        x: W * 0.2 + Math.random() * W * 0.6,
+        y: H + 10,
+        size: 2 + Math.random() * 4 * pulse,
+        speed: 0.4 + Math.random() * 1.2,
+        alpha: 0.3 + Math.random() * 0.4 * pulse,
+        drift: (Math.random() - 0.5) * 0.5,
+      });
+    }
+
+    if (spVibeEngineState.particles) {
+      spVibeEngineState.particles = spVibeEngineState.particles.filter(p => p.alpha > 0.01);
+      spVibeEngineState.particles.forEach(p => {
+        p.y    -= p.speed;
+        p.x    += p.drift;
+        p.alpha *= 0.993;
+        ctx2d.beginPath();
+        ctx2d.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx2d.fillStyle = `rgba(${r},${g},${b},${p.alpha.toFixed(3)})`;
+        ctx2d.fill();
+      });
+    }
+  }
+
+  tick();
+}
+
+const spVibeEngineState = { particles: [] };
+
+function stopVibeEngine() {
+  if (spVibeRaf) { cancelAnimationFrame(spVibeRaf); spVibeRaf = null; }
+  spVibeEngineState.particles = [];
+  const canvas = document.getElementById('sp-vibe-canvas');
+  if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); }
+}
+
+// ── Header widget ─────────────────────────────────────────
 function updateHeaderWidget(info) {
   ensureHeaderWidgets(info);
   const spSection = document.getElementById('sp-header-section');
   if (!spSection) return;
 
   if (!info) {
-    spSection.innerHTML = `
-      <button class="hdr-sp-connect" onclick="spotifyLogin()">♫ Connect Spotify</button>
-    `;
+    spSection.innerHTML = `<button class="hdr-sp-connect" onclick="spotifyLogin()">♫ Connect Spotify</button>`;
     return;
   }
 
@@ -791,23 +1036,16 @@ function ensureHeaderWidgets(info) {
     const saveStatus = document.getElementById('save-status');
     headerRight.insertBefore(pomDiv, saveStatus);
   }
-
-  // pom-edit-pop is created on demand inside pomOpenEdit()
 }
 
 // ── Playback controls ─────────────────────────────────────
 async function spPlayPause() {
   if (!spToken) return;
-  if (spPlayer) {
-    spPlayer.togglePlay();
-    return;
-  }
+  if (spPlayer) { spPlayer.togglePlay(); return; }
   const state = await fetch('https://api.spotify.com/v1/me/player', {
     headers: { 'Authorization': `Bearer ${spToken}` }
   }).then(r => r.json()).catch(() => null);
-
-  const isPlaying = state?.is_playing;
-  const endpoint  = isPlaying ? 'pause' : 'play';
+  const endpoint = state?.is_playing ? 'pause' : 'play';
   await fetch(`https://api.spotify.com/v1/me/player/${endpoint}`, {
     method: 'PUT',
     headers: { 'Authorization': `Bearer ${spToken}` },
@@ -822,7 +1060,6 @@ async function spNext() {
   await fetch('https://api.spotify.com/v1/me/player/next', {
     method: 'POST', headers: { 'Authorization': `Bearer ${spToken}` }
   });
-  // Force full re-render after skip so new track shows immediately
   spCurrentTrack = null;
   setTimeout(fetchNowPlaying, 500);
 }
@@ -849,7 +1086,7 @@ async function spToggleShuffle() {
 
 async function spCycleRepeat() {
   if (!spToken) return;
-  const cycle = { 'off': 'context', 'context': 'track', 'track': 'off' };
+  const cycle    = { 'off': 'context', 'context': 'track', 'track': 'off' };
   const newState = cycle[spRepeatState] || 'off';
   await fetch('https://api.spotify.com/v1/me/player/repeat?state=' + newState, {
     method: 'PUT', headers: { 'Authorization': `Bearer ${spToken}` }
@@ -858,78 +1095,52 @@ async function spCycleRepeat() {
   updateShuffleRepeatButtons();
 }
 
-function updateShuffleRepeatButtons() {
-  var shuffleBtn = document.querySelector('.sp-shuffle-btn');
-  if (shuffleBtn) shuffleBtn.classList.toggle('active', spShuffleState);
-  var repeatBtn = document.querySelector('.sp-repeat-btn');
-  if (repeatBtn) {
-    repeatBtn.setAttribute('data-state', spRepeatState);
-    repeatBtn.textContent = spRepeatState === 'track' ? 'Repeat 1' : spRepeatState === 'context' ? 'Repeat All' : 'Repeat';
-    repeatBtn.classList.toggle('active', spRepeatState !== 'off');
-  }
-}
-
-// ── Add-to-playlist mode ─────────────────────────────────
+// ── Add-to-playlist mode ──────────────────────────────────
 function spToggleAddMode() {
   spAddMode = !spAddMode;
-  var saveBtn = document.querySelector('.sp-save-btn');
-  if (saveBtn) saveBtn.classList.toggle('active', spAddMode);
-  var panel = document.getElementById('sp-playlists-list');
-  var banner = document.getElementById('sp-add-banner');
+  document.querySelectorAll('.sp-save-btn').forEach(btn => {
+    btn.classList.toggle('active', spAddMode);
+  });
+  const panel  = document.getElementById('sp-playlists-list');
+  const banner = document.getElementById('sp-add-banner');
 
   if (spAddMode) {
-    // Show add mode banner at top of playlist panel
     if (panel && !banner) {
-      var b = document.createElement('div');
+      const b = document.createElement('div');
       b.id = 'sp-add-banner';
       b.style.cssText = 'background:var(--accent);color:#fff;font-family:var(--font-mono);font-size:.68rem;' +
         'padding:.35rem .6rem;border-radius:var(--r-sm);margin-bottom:.4rem;display:flex;align-items:center;justify-content:space-between';
       b.innerHTML = '<span>Tap a playlist to add this track</span>' +
-        '<button onclick="spToggleAddMode()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:.9rem;line-height:1">x</button>';
+        '<button onclick="spToggleAddMode()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:.9rem">×</button>';
       panel.insertBefore(b, panel.firstChild);
     }
-    // Swap click handlers on all rows
-    document.querySelectorAll('.sp-playlist-row').forEach(function(row) {
-      row.dataset.origClick = 'play';
-      row.onclick = function() {
+    document.querySelectorAll('.sp-playlist-row').forEach(row => {
+      row.onclick = () => {
         spAddToPlaylist(row.dataset.uri || '', row.querySelector('.sp-playlist-name').textContent);
         spToggleAddMode();
       };
     });
+    // Switch to playlists view
+    setFocusRight('playlists');
   } else {
-    // Restore normal click handlers
     if (banner) banner.remove();
-    document.querySelectorAll('.sp-playlist-row').forEach(function(row) {
-      var uri = row.dataset.uri;
-      var name = row.querySelector('.sp-playlist-name') ? row.querySelector('.sp-playlist-name').textContent : '';
-      row.onclick = function() { playSpotifyPlaylist(uri, name); };
+    document.querySelectorAll('.sp-playlist-row').forEach(row => {
+      const uri  = row.dataset.uri;
+      const name = row.querySelector('.sp-playlist-name')?.textContent || '';
+      row.onclick = () => playSpotifyPlaylist(uri, name);
     });
   }
 }
 
-
-function showToast(text, duration) {
-  var msg = document.createElement('div');
-  msg.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg-card);' +
-    'border:1px solid var(--border-bright);color:var(--text-primary);font-family:var(--font-mono);font-size:.75rem;' +
-    'padding:.45rem 1rem;border-radius:999px;z-index:2000;pointer-events:none;opacity:1;transition:opacity .4s;' +
-    'white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.15)';
-  msg.textContent = text;
-  document.body.appendChild(msg);
-  setTimeout(function() { msg.style.opacity = '0'; setTimeout(function() { msg.remove(); }, 400); }, duration || 2200);
-}
-
 async function spAddToPlaylist(playlistUri, playlistName) {
   if (!spToken || !spCurrentTrackUri) return;
-  var playlistId = playlistUri.split(':')[2];
+  const playlistId = playlistUri.split(':')[2];
   if (!playlistId) return;
-  var resp = await fetch('https://api.spotify.com/v1/playlists/' + playlistId + '/tracks', {
+  const resp = await fetch('https://api.spotify.com/v1/playlists/' + playlistId + '/tracks', {
     method: 'POST',
     headers: { 'Authorization': 'Bearer ' + spToken, 'Content-Type': 'application/json' },
     body: JSON.stringify({ uris: [spCurrentTrackUri] })
   });
-
-  // 401/403 — try silent token refresh first; only full re-auth if that fails
   if (resp.status === 401 || resp.status === 403) {
     const refreshed = await refreshSpotifyToken();
     if (refreshed) {
@@ -941,14 +1152,22 @@ async function spAddToPlaylist(playlistUri, playlistName) {
       showToast(retry.ok ? ('Added to ' + playlistName) : 'Could not add track — try again', 2200);
       return;
     }
-    // Refresh failed — genuinely missing scope; save intent and re-auth once
-    localStorage.setItem('sp_pending_add', JSON.stringify({
-      playlistUri, playlistName, trackUri: spCurrentTrackUri
-    }));
-    showToast('Re-authorising Spotify for playlist editing…', 2500);
+    localStorage.setItem('sp_pending_add', JSON.stringify({ playlistUri, playlistName, trackUri: spCurrentTrackUri }));
+    showToast('Re-authorising Spotify…', 2500);
     setTimeout(() => spotifyLogin(), 1200);
     return;
   }
-
   showToast(resp.ok ? ('Added to ' + playlistName) : 'Could not add track — try again', 2200);
+}
+
+// ── Toast ─────────────────────────────────────────────────
+function showToast(text, duration) {
+  const msg = document.createElement('div');
+  msg.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg-card);' +
+    'border:1px solid var(--border-bright);color:var(--text-primary);font-family:var(--font-mono);font-size:.75rem;' +
+    'padding:.45rem 1rem;border-radius:999px;z-index:9000;pointer-events:none;opacity:1;transition:opacity .4s;' +
+    'white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.15)';
+  msg.textContent = text;
+  document.body.appendChild(msg);
+  setTimeout(() => { msg.style.opacity='0'; setTimeout(()=>msg.remove(), 400); }, duration || 2200);
 }
