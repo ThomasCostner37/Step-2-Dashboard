@@ -121,6 +121,10 @@ async function showApp() {
 }
 
 window.handleSignIn = function () {
+  if (!tokenClient) {
+    console.warn('Google sign-in is not ready yet.');
+    return;
+  }
   tokenClient.requestAccessToken({ prompt: '' });
 };
 
@@ -132,8 +136,12 @@ window.handleSignOut = function () {
   document.getElementById('auth-screen').style.display = 'flex';
 };
 
-document.getElementById('sign-in-btn')?.addEventListener('click', window.handleSignIn);
-document.getElementById('sign-out-btn')?.addEventListener('click', window.handleSignOut);
+function wireAuthButtons() {
+  document.getElementById('sign-in-btn')?.addEventListener('click', window.handleSignIn);
+  document.getElementById('sign-out-btn')?.addEventListener('click', window.handleSignOut);
+}
+
+wireAuthButtons();
 
 // ── Drive Sync ────────────────────────────────────────────
 async function loadFromDrive() {
