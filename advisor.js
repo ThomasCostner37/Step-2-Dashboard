@@ -1,112 +1,8 @@
 // ── FOCUS ADVISOR ─────────────────────────────────────────
 function injectAdvisor() {
-  // ── Floating button ──
-  const fab = document.createElement('button');
-  fab.id = 'advisor-fab';
-  fab.innerHTML = '✦ Advisor';
-  fab.onclick = openAdvisorModal;
-  document.body.appendChild(fab);
-
-  // ── Modal ──
-  const modal = document.createElement('div');
-  modal.id = 'advisor-modal';
-  modal.className = 'modal-ov';
-  modal.onclick = e => { if (e.target === modal) closeAdvisorModal(); };
-  modal.innerHTML = `
-    <div class="modal-box" style="max-width:680px;max-height:88vh">
-      <div class="modal-hdr" style="gap:12px">
-        <div style="display:flex;align-items:center;gap:10px;flex:1">
-          <div class="modal-title" style="font-size:1.05rem">Study Advisor</div>
-          <div style="display:flex;gap:3px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--r-sm);padding:3px">
-            <button class="advisor-tab-btn active" id="adv-tab-plan" onclick="switchAdvisorTab('plan')">Plan</button>
-            <button class="advisor-tab-btn" id="adv-tab-train" onclick="switchAdvisorTab('train')">Train</button>
-          </div>
-        </div>
-        <button class="modal-close" onclick="closeAdvisorModal()">×</button>
-      </div>
-      <div class="modal-body" style="padding:0">
-
-        <!-- PLAN TAB -->
-        <div id="adv-panel-plan" style="padding:1.1rem 1.25rem">
-          <div style="font-family:var(--font-mono);font-size:.65rem;color:var(--text-tertiary);margin-bottom:1rem;line-height:1.6">
-            Tell me your day and I'll build a schedule from your weak spots, upcoming exams, and past session data.
-          </div>
-
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-            <div>
-              <div class="adv-label">Number of study blocks</div>
-              <select class="input adv-select" id="adv-blocks" style="margin-top:4px">
-                <option value="1">1 block</option>
-                <option value="2" selected>2 blocks</option>
-                <option value="3">3 blocks</option>
-                <option value="4">4 blocks</option>
-              </select>
-            </div>
-            <div>
-              <div class="adv-label">Hours per block</div>
-              <select class="input adv-select" id="adv-hours" style="margin-top:4px">
-                <option value="1">1 hour</option>
-                <option value="1.5">1.5 hours</option>
-                <option value="2">2 hours</option>
-                <option value="2.5">2.5 hours</option>
-                <option value="3" selected>3 hours</option>
-                <option value="3.5">3.5 hours</option>
-                <option value="4">4 hours</option>
-              </select>
-            </div>
-          </div>
-
-          <div style="margin-bottom:10px">
-            <div class="adv-label">Energy level today</div>
-            <div style="display:flex;gap:6px;margin-top:4px">
-              <button class="adv-energy-btn" id="adv-e-low" onclick="setEnergy('low')">Low</button>
-              <button class="adv-energy-btn active" id="adv-e-med" onclick="setEnergy('medium')">Medium</button>
-              <button class="adv-energy-btn" id="adv-e-high" onclick="setEnergy('high')">High</button>
-            </div>
-          </div>
-
-          <div style="margin-bottom:14px">
-            <div class="adv-label" style="margin-bottom:4px">Anything to note? <span style="font-style:italic;font-weight:400">(optional)</span></div>
-            <textarea class="input" id="adv-extra" placeholder="e.g. focusing on OB today, avoiding surgery, have a half-day…" style="min-height:52px;resize:vertical;font-size:.82rem"></textarea>
-          </div>
-
-          <button class="btn btn-primary" id="adv-plan-btn" onclick="runAdvisorPlan()" style="width:100%;justify-content:center;padding:.6rem">
-            Build My Day
-          </button>
-
-          <!-- Result area -->
-          <div id="adv-plan-result" style="display:none;margin-top:1rem"></div>
-        </div>
-
-        <!-- TRAIN TAB -->
-        <div id="adv-panel-train" style="display:none;padding:1.1rem 1.25rem">
-          <div style="font-family:var(--font-mono);font-size:.65rem;color:var(--text-tertiary);margin-bottom:1rem;line-height:1.6">
-            Tell me what you studied. Be as casual or detailed as you want — I'll parse it and save it to your log so future plans get smarter.
-          </div>
-
-          <div style="margin-bottom:10px">
-            <div class="adv-label" style="margin-bottom:4px">What did you do?</div>
-            <textarea class="input" id="adv-train-input"
-              placeholder="e.g. 40 AMBOSS questions on OB, took about 1.5 hours, felt hard on the labor and delivery stuff but okay on menopause. Also reviewed Mehlman Risk Factors for 30 min."
-              style="min-height:100px;resize:vertical;font-size:.85rem;line-height:1.6"></textarea>
-          </div>
-
-          <button class="btn btn-primary" id="adv-train-btn" onclick="runAdvisorTrain()" style="width:100%;justify-content:center;padding:.6rem">
-            Parse &amp; Save
-          </button>
-
-          <!-- Result area -->
-          <div id="adv-train-result" style="display:none;margin-top:1rem"></div>
-
-          <!-- Session log -->
-          <div id="adv-session-log" style="margin-top:1.25rem"></div>
-        </div>
-
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-
+  // Advisor FAB and modal are now static in index.html.
+  // Just wire up the backdrop click handler (onclick attr handles it declaratively).
+}
 
 
 let advisorEnergy = 'medium';
@@ -178,50 +74,22 @@ async function runAdvisorPlan() {
     return `- ${t.name} [${prio} priority]`;
   }).join('\n');
 
-  const prompt = `You are a USMLE Step 2 CK study advisor for Thomas, a medical student with exam on August 12, 2026 (today is ${today}).
+  const systemPrompt = `You are a USMLE Step 2 CK study advisor for Thomas, a medical student (exam Aug 12 2026). Build concrete daily study schedules from the data he provides. Rules: group related topics per block; respect HIGH→MEDIUM→LOW priority order; low energy = recognition/diagnosis tasks first, high energy = mechanism/cause questions (his hardest type); leave ~15% buffer by under-filling time (never add a "Buffer" line); output clean topic names only (no time or priority labels inline); end with a 1–2 sentence rationale. Respond ONLY with valid JSON: {"blocks":[{"label":"Block 1","totalMinutes":180,"topics":[{"name":"Topic","minutes":60,"note":"why"}]}],"rationale":"..."}`;
 
-OPEN WEAK TOPICS (sorted high→low priority):
-${topicList || 'None listed'}
+  const userMsg =
+`OPEN TOPICS:
+${topicList || 'None'}
 
 UPCOMING EXAMS:
 ${examTimeline.join('\n') || 'None'}
 
-CALENDAR / BLOCKED DAYS:
+CALENDAR:
 ${calItems.join('\n') || 'None'}
 
-PAST SESSION LOG (most recent 20):
-${sessionLogs.join('\n') || 'No sessions logged yet'}
+SESSION LOG (last 20):
+${sessionLogs.join('\n') || 'None'}
 
-TODAY'S REQUEST:
-- ${blocks} study block(s)
-- ${hours} hours per block
-- Energy level: ${advisorEnergy}
-- Notes: ${extra || 'none'}
-
-Build a concrete study schedule. Rules:
-1. Group related topics together (e.g. all OB topics in one block, all cardio in one block).
-2. Prioritize high-priority topics first, then medium, then low.
-3. For low energy days, front-load recognition/pattern topics. For high energy, prioritize mechanism/cause questions (Thomas's hardest type).
-4. Estimate time per topic cluster based on session log history if available, otherwise reasonable defaults (30–60 min per topic cluster).
-5. Build in a 15–20% buffer by simply allocating less time to topics — do NOT add a "Buffer" or "Review" line as a topic.
-6. Note if any calendar events or blocked days are relevant this week.
-7. Give a 1–2 sentence rationale at the end explaining why you chose this order.
-8. Topic names should be clean and concise — no time estimates or priority labels in the name itself.
-
-Respond ONLY with valid JSON in this exact format:
-{
-  "blocks": [
-    {
-      "label": "Block 1",
-      "totalMinutes": 180,
-      "topics": [
-        { "name": "OB: Labor & Delivery + Obstetric Complications", "minutes": 90, "note": "Your highest-miss CMS cluster" },
-        { "name": "Cardio: Dysrhythmias + Congenital", "minutes": 55, "note": "Medium priority, related content" }
-      ]
-    }
-  ],
-  "rationale": "Started with OB because it has the most open high-priority topics and you historically run long on these. Grouped cardio topics to build schema efficiently."
-}`;
+REQUEST: ${blocks} block(s) × ${hours}h, energy=${advisorEnergy}${extra ? ', notes: ' + extra : ''}`;
 
   try {
     const resp = await fetch('https://fragrant-wind-ad59.thomas31406.workers.dev', {
@@ -230,7 +98,8 @@ Respond ONLY with valid JSON in this exact format:
       body: JSON.stringify({
         model: 'claude-sonnet-4-5',
         max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
+        system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content: userMsg }]
       })
     });
     const data = await resp.json();
@@ -321,21 +190,9 @@ async function runAdvisorTrain() {
   result.innerHTML = `<div class="adv-result-box"><div class="adv-result-thinking">Parsing your session…</div></div>`;
 
   const today = new Date().toISOString().slice(0,10);
-  const prompt = `Parse this study session log entry from a medical student (Thomas) studying for USMLE Step 2 CK.
+  const trainSystem = `Parse study session logs from Thomas, a USMLE Step 2 CK student. Extract structured data and respond ONLY with valid JSON: {"date":"YYYY-MM-DD","summary":"1-line summary","topics":["topic1"],"totalMinutes":90,"difficulty":"easy|medium|hard","notes":"observations"}. Estimate time conservatively if unclear. Topics should match USMLE subject areas.`;
 
-Entry: "${text}"
-
-Extract structured data. Respond ONLY with valid JSON:
-{
-  "date": "${today}",
-  "summary": "short 1-line summary of what was done",
-  "topics": ["topic1", "topic2"],
-  "totalMinutes": 90,
-  "difficulty": "easy|medium|hard",
-  "notes": "any specific observations about performance or struggles"
-}
-
-If time is unclear, estimate conservatively. Topics should match USMLE subject areas when possible.`;
+  const trainMsg = `Date: ${today}\nEntry: "${text}"`;
 
   try {
     const resp = await fetch('https://fragrant-wind-ad59.thomas31406.workers.dev', {
@@ -344,7 +201,8 @@ If time is unclear, estimate conservatively. Topics should match USMLE subject a
       body: JSON.stringify({
         model: 'claude-sonnet-4-5',
         max_tokens: 400,
-        messages: [{ role: 'user', content: prompt }]
+        system: [{ type: 'text', text: trainSystem, cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content: trainMsg }]
       })
     });
     const data  = await resp.json();

@@ -364,32 +364,9 @@ function renderPracticeExams() {
 
 // ── Practice Exam Modal ───────────────────────────────────
 function openPracticeExamModal() {
-  let modal = document.getElementById('pe-modal');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'pe-modal';
-    modal.className = 'modal-ov';
-    modal.onclick = e => { if (e.target === modal) closePracticeExamModal(); };
-    modal.innerHTML = `
-      <div class="modal-box">
-        <div class="modal-hdr">
-          <div class="modal-title">Manage Practice Exams</div>
-          <button class="modal-close" onclick="closePracticeExamModal()">×</button>
-        </div>
-        <div class="modal-body">
-          <div id="pe-list"></div>
-          <div class="pe-add">
-            <input class="input" id="pe-name-inp" placeholder="Exam name (e.g. NBME Form 9)…">
-            <input class="input" type="date" id="pe-date-inp" style="max-width:145px">
-            <button class="btn btn-primary btn-sm" onclick="addPracticeExam()">Add</button>
-          </div>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-  }
+  // pe-modal is static in index.html — just populate and open
   renderPracticeExamModal();
-  modal.classList.add('open');
+  document.getElementById('pe-modal').classList.add('open');
 }
 
 function closePracticeExamModal() {
