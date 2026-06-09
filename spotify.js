@@ -31,6 +31,7 @@ let spIsPlaying        = false;
 let spShuffleState     = false;
 let spRepeatState      = 'off';   // 'off' | 'context' | 'track'
 let spCurrentTrackUri  = null;
+let spAddMode          = false;
 
 // ── Expanded quotes ──────────────────────────────────────
 const ALL_QUOTES = [
@@ -178,9 +179,11 @@ function syncFocusCardHeights() {
   var sp  = document.querySelector('#tab-focus .sp-card');
   var pom = document.querySelector('#tab-focus .pom-card');
   if (!sp || !pom) return;
-  // Stacked single-column layout (mobile): let it flow naturally
   if (window.innerWidth <= 700) { pom.style.height = ''; return; }
-  pom.style.height = sp.offsetHeight + 'px';
+  // Cap at viewport minus chrome (header 76 + tabbar 60 + bottom padding 80)
+  var maxH = window.innerHeight - 216;
+  var h    = Math.min(sp.offsetHeight, maxH);
+  pom.style.height = h + 'px';
 }
 
 function observeFocusCardHeight() {
@@ -301,6 +304,7 @@ async function fetchSpotifyPlaylists() {
     }
 
     const data = await resp.json();
+    if (data.items && data.items[0]) console.log("[Spotify playlists] first item tracks field:", data.items[0].tracks);
 
     if (!data.items?.length) {
       container.innerHTML = '<div class="sp-idle" style="padding:.5rem 0">No playlists found</div>';
@@ -335,7 +339,7 @@ async function fetchSpotifyPlaylists() {
       }
       <div class="sp-playlist-meta">
       <div class="sp-playlist-name">${escH(pl.name)}</div>
-      <div class="sp-playlist-count">${pl.tracks?.total || 0} tracks</div>
+      <div class="sp-playlist-count">${pl.owner ? pl.owner.display_name || "" : ""}</div>
      </div>
       <div class="sp-playlist-play">▶</div>
       `;
@@ -688,10 +692,10 @@ function renderFocusTabNowPlaying(info) {
         </button>
         <button class="sp-ctrl-btn" onclick="spNext()" title="Next">⏭</button>
       </div>
-      <div style="display:flex;align-items:center;justify-content:center;gap:8px">
-        <button class="sp-ctrl-btn sp-shuffle-btn${spShuffleState ? ' active' : ''}" onclick="spToggleShuffle()" title="Shuffle">⇄</button>
-        <button class="sp-ctrl-btn sp-repeat-btn" onclick="spCycleRepeat()" title="Repeat" data-state="${spRepeatState}">${spRepeatState === 'track' ? '🔂' : spRepeatState === 'context' ? '🔁' : '↻'}</button>
-        <button class="sp-ctrl-btn sp-save-btn" onclick="spShowSaveMenu(event)" title="Add to playlist">＋</button>
+      <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:2px">
+        <button class="sp-pill-btn sp-shuffle-btn${spShuffleState ? ' active' : ''}" onclick="spToggleShuffle()">Shuffle</button>
+        <button class="sp-pill-btn sp-repeat-btn" onclick="spCycleRepeat()" data-state="${spRepeatState}">${spRepeatState === 'track' ? 'Repeat 1' : spRepeatState === 'context' ? 'Repeat All' : 'Repeat'}</button>
+        <button class="sp-pill-btn sp-save-btn" onclick="spToggleAddMode()">+ Playlist</button>
       </div>
     </div>
   `;
@@ -828,58 +832,52 @@ async function spCycleRepeat() {
 
 function updateShuffleRepeatButtons() {
   var shuffleBtn = document.querySelector('.sp-shuffle-btn');
-  if (shuffleBtn) {
-    shuffleBtn.classList.toggle('active', spShuffleState);
-    shuffleBtn.title = spShuffleState ? 'Shuffle: On' : 'Shuffle: Off';
-  }
+  if (shuffleBtn) shuffleBtn.classList.toggle('active', spShuffleState);
   var repeatBtn = document.querySelector('.sp-repeat-btn');
   if (repeatBtn) {
     repeatBtn.setAttribute('data-state', spRepeatState);
-    repeatBtn.textContent = spRepeatState === 'track' ? '1' : spRepeatState === 'context' ? 'all' : 'off';
-    repeatBtn.title = 'Repeat: ' + spRepeatState;
+    repeatBtn.textContent = spRepeatState === 'track' ? 'Repeat 1' : spRepeatState === 'context' ? 'Repeat All' : 'Repeat';
   }
 }
 
-// ── Save to playlist ──────────────────────────────────────
-function spShowSaveMenu(e) {
-  var existing = document.getElementById('sp-save-pop');
-  if (existing) { existing.remove(); return; }
+// ── Add-to-playlist mode ─────────────────────────────────
+function spToggleAddMode() {
+  spAddMode = !spAddMode;
+  var saveBtn = document.querySelector('.sp-save-btn');
+  if (saveBtn) saveBtn.classList.toggle('active', spAddMode);
+  var panel = document.getElementById('sp-playlists-list');
+  var banner = document.getElementById('sp-add-banner');
 
-  var pop = document.createElement('div');
-  pop.id = 'sp-save-pop';
-  pop.style.cssText = 'position:fixed;z-index:1200;background:var(--bg-card);border:1px solid var(--border);' +
-    'border-radius:var(--r-md);box-shadow:0 8px 32px rgba(0,0,0,.18);padding:.5rem;min-width:200px;max-height:280px;overflow-y:auto;';
-  pop.innerHTML = '<div style="font-family:var(--font-mono);font-size:.65rem;color:var(--text-tertiary);padding:.3rem .5rem .5rem;text-transform:uppercase;letter-spacing:.08em">Add to playlist</div>';
-
-  // Populate with playlists from the existing list
-  var rows = document.querySelectorAll('.sp-playlist-row');
-  if (!rows.length) {
-    pop.innerHTML += '<div style="font-family:var(--font-mono);font-size:.72rem;color:var(--text-tertiary);padding:.5rem">No playlists loaded</div>';
-  }
-  rows.forEach(function(row) {
-    var nameEl = row.querySelector('.sp-playlist-name');
-    if (!nameEl) return;
-    var btn = document.createElement('button');
-    btn.style.cssText = 'display:block;width:100%;text-align:left;background:none;border:none;cursor:pointer;' +
-      'font-family:var(--font-mono);font-size:.75rem;color:var(--text-primary);padding:.4rem .5rem;border-radius:4px;';
-    btn.textContent = nameEl.textContent;
-    btn.onmouseenter = function() { btn.style.background = 'var(--bg-elevated)'; };
-    btn.onmouseleave = function() { btn.style.background = 'none'; };
-    btn.onclick = function() { spAddToPlaylist(row.dataset.uri || '', btn.textContent); pop.remove(); };
-    pop.appendChild(btn);
-  });
-
-  var rect = e.currentTarget.getBoundingClientRect();
-  pop.style.left = Math.max(8, rect.left - 160) + 'px';
-  pop.style.top  = (rect.bottom + 6) + 'px';
-  document.body.appendChild(pop);
-
-  setTimeout(function() {
-    document.addEventListener('click', function dismiss(ev) {
-      if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener('click', dismiss); }
+  if (spAddMode) {
+    // Show add mode banner at top of playlist panel
+    if (panel && !banner) {
+      var b = document.createElement('div');
+      b.id = 'sp-add-banner';
+      b.style.cssText = 'background:var(--accent);color:#fff;font-family:var(--font-mono);font-size:.68rem;' +
+        'padding:.35rem .6rem;border-radius:var(--r-sm);margin-bottom:.4rem;display:flex;align-items:center;justify-content:space-between';
+      b.innerHTML = '<span>Tap a playlist to add this track</span>' +
+        '<button onclick="spToggleAddMode()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:.9rem;line-height:1">x</button>';
+      panel.insertBefore(b, panel.firstChild);
+    }
+    // Swap click handlers on all rows
+    document.querySelectorAll('.sp-playlist-row').forEach(function(row) {
+      row.dataset.origClick = 'play';
+      row.onclick = function() {
+        spAddToPlaylist(row.dataset.uri || '', row.querySelector('.sp-playlist-name').textContent);
+        spToggleAddMode();
+      };
     });
-  }, 100);
+  } else {
+    // Restore normal click handlers
+    if (banner) banner.remove();
+    document.querySelectorAll('.sp-playlist-row').forEach(function(row) {
+      var uri = row.dataset.uri;
+      var name = row.querySelector('.sp-playlist-name') ? row.querySelector('.sp-playlist-name').textContent : '';
+      row.onclick = function() { playSpotifyPlaylist(uri, name); };
+    });
+  }
 }
+
 
 async function spAddToPlaylist(playlistUri, playlistName) {
   if (!spToken || !spCurrentTrackUri) return;

@@ -493,8 +493,8 @@ function injectStyles() {
 }
 
     /* Now Playing card */
-    .sp-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.25rem; }
-    .sp-art-lg { width:100%; aspect-ratio:1; border-radius:var(--r-md); object-fit:cover;
+    .sp-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.25rem; overflow:hidden; }
+    .sp-art-lg { width:100%; aspect-ratio:1; max-height:calc(100vh - 366px); border-radius:var(--r-md); object-fit:cover;
                  background:var(--bg-elevated); margin-bottom:1rem; display:block; }
     .sp-track-lg { font-family:var(--font-display); font-size:1.1rem; font-weight:700;
                    color:var(--text-primary); margin-bottom:.2rem; line-height:1.3; }
