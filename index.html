@@ -171,9 +171,8 @@
           transform="rotate(-90 29 29)" style="transition:stroke-dashoffset .5s ease"/>
       </svg>
       <div class="ring-stats">
-        <div class="ring-main" id="ring-frac">0 / 0</div>
-        <div class="ring-sub">topics completed</div>
-        <div class="ring-pct" id="ring-pct">0% done</div>
+        <div class="ring-main" id="ring-frac" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap"></div>
+        <div class="ring-pct" id="ring-pct" style="margin-top:3px">0 remaining</div>
       </div>
       <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="openTopicArchiveModal()">
         Archived <span id="topic-arch-badge" class="arch-badge" style="display:none;margin-left:4px"></span>

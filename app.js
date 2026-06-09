@@ -593,10 +593,15 @@ function renderWeakSpots() {
   const all  = [...(state.topics || [])].sort((a,b) =>
     (PRIO_ORDER[a.priority] ?? 3) - (PRIO_ORDER[b.priority] ?? 3)
   );
-  const done = all.filter(t => t.done).length;
-  const pct  = all.length ? Math.round((done/all.length)*100) : 0;
-  if (frac) frac.textContent = done + ' / ' + all.length + ' · ' + pct + '%';
-  if (fill) fill.style.width = pct + '%';
+  const open = all.filter(t => !t.done);
+  const hi  = open.filter(t => t.priority === 'high').length;
+  const med = open.filter(t => t.priority === 'medium').length;
+  const lo  = open.filter(t => t.priority === 'low').length;
+  if (frac) frac.innerHTML =
+    `${prioBadge('high','small')} <span style="margin-right:5px">${hi}</span>` +
+    `${prioBadge('medium','small')} <span style="margin-right:5px">${med}</span>` +
+    `${prioBadge('low','small')} <span>${lo}</span>`;
+  if (fill) fill.style.display = 'none';
 
   const shown = all.filter(t => activeTopicFilter === 'open' ? !t.done : true);
   if (!shown.length) {
@@ -682,9 +687,9 @@ function renderTopics() {
       <span class="topic-drag-handle" title="Drag to reorder">⠿</span>
       <div class="t-check" onclick="event.stopPropagation();toggleTopicDone('${topic.id}')" style="cursor:pointer;width:18px;height:18px;border-radius:4px;border:1px solid var(--border-bright);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0">${topic.done?'✓':''}</div>
       <div class="topic-name-full" onclick="event.stopPropagation();toggleTopicDone('${topic.id}')" style="cursor:pointer">${escH(topic.name)}</div>
-      ${prioBadgeHtml}
+      ${topic.done ? '' : prioBadgeHtml}
       <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
-        <button class="topic-arch-btn" title="${prioTitle}" onclick="event.stopPropagation();cycleTopicPriority('${topic.id}')" style="color:${prioColor};font-size:.7rem;min-width:22px">●</button>
+        ${topic.done ? '' : `<button class="topic-arch-btn" title="${prioTitle}" onclick="event.stopPropagation();cycleTopicPriority('${topic.id}')" style="color:${prioColor};font-size:.7rem;min-width:22px">●</button>`}
         <button class="topic-arch-btn" onclick="event.stopPropagation();archiveTopicById('${topic.id}')">Archive</button>
       </div>
     `;
@@ -744,7 +749,10 @@ function cycleTopicPriority(id) {
 
 function sortTopicsByPriority() {
   const PRIO_ORDER = { high:0, medium:1, low:2, none:3 };
-  state.topics.sort((a,b) => (PRIO_ORDER[a.priority] ?? 3) - (PRIO_ORDER[b.priority] ?? 3));
+  state.topics.sort((a,b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    return (PRIO_ORDER[a.priority] ?? 3) - (PRIO_ORDER[b.priority] ?? 3);
+  });
   renderTopics(); renderWeakSpots(); scheduleSave();
 }
 
@@ -812,11 +820,20 @@ function updateRing() {
   const pct  = all.length ? done/all.length : 0;
   const circ = 144.5;
   const arc  = document.getElementById('ring-arc');
+  if (arc) arc.setAttribute('stroke-dashoffset', (circ - pct*circ).toFixed(1));
+
+  const open = all.filter(t => !t.done);
+  const hi  = open.filter(t => t.priority === 'high').length;
+  const med = open.filter(t => t.priority === 'medium').length;
+  const lo  = open.filter(t => t.priority === 'low').length;
+
   const frac = document.getElementById('ring-frac');
   const rpct = document.getElementById('ring-pct');
-  if (arc)  arc.setAttribute('stroke-dashoffset', (circ - pct*circ).toFixed(1));
-  if (frac) frac.textContent = done + ' / ' + all.length;
-  if (rpct) rpct.textContent = Math.round(pct*100) + '% done';
+  if (frac) frac.innerHTML =
+    `${prioBadge('high','small')} <span style="margin-right:6px">${hi}</span>` +
+    `${prioBadge('medium','small')} <span style="margin-right:6px">${med}</span>` +
+    `${prioBadge('low','small')} <span>${lo}</span>`;
+  if (rpct) rpct.textContent = hi + med + lo + ' remaining';
 }
 
 // ── Resources ─────────────────────────────────────────────
