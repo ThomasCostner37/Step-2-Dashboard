@@ -229,7 +229,7 @@ function injectSpotifyTab() {
           </div>
         </div>
       </div>
-      <canvas id="sp-vibe-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:0;transition:opacity 1.2s ease;display:none"></canvas>
+      <canvas id="sp-vibe-canvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:50;opacity:0;transition:opacity 1.2s ease;display:none"></canvas>
     `;
     app.appendChild(panel);
   }
@@ -631,6 +631,8 @@ async function fetchNowPlaying() {
 // ── Like / Unlike ─────────────────────────────────────────
 async function checkLikedState(trackUri) {
   if (!spToken || !trackUri) return;
+  // Episodes (podcasts) use a different API — skip liked check for them
+  if (trackUri.includes(':episode:')) { spIsLiked = false; updateLikeButton(); return; }
   const id = trackUri.split(':')[2];
   if (!id) return;
   try {
@@ -726,12 +728,16 @@ function updateNowPlayingFromSDK(sdkState) {
   }
 
   checkLikedState(newUri);
+  // SDK track_window.current_track has artists[] for songs, show for podcasts
+  const isEpisode = track.type === 'episode';
   renderNowPlayingDirect({
     isPlaying:  !sdkState.paused,
     trackName:  track.name,
-    artistName: track.artists.map(a => a.name).join(', '),
-    albumArt:   track.album.images[0]?.url || '',
-    albumName:  track.album.name,
+    artistName: isEpisode
+      ? (track.album?.name || 'Podcast')
+      : (track.artists?.map(a => a.name).join(', ') || ''),
+    albumArt:   track.album?.images?.[0]?.url || '',
+    albumName:  track.album?.name || '',
     progress:   sdkState.position,
     duration:   sdkState.duration,
     trackUri:   track.uri,
@@ -771,7 +777,9 @@ function renderFocusTabNowPlaying(info) {
 
   if (!info) {
     container.innerHTML = spToken
-      ? '<div class="sp-idle" style="padding:1.5rem 0">Nothing playing right now</div><div class="sp-idle" style="padding:0 0 .5rem;font-size:.68rem">Pick a playlist on the right to start</div>'
+      ? `<div class="sp-idle" style="padding:1.2rem 0 .4rem;font-size:.85rem">Nothing playing right now</div>
+         <div class="sp-idle" style="font-size:.68rem;padding:0 0 .8rem">Start playing something in Spotify, then come back</div>
+         <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.2rem;background:var(--bg-elevated);border:1px solid var(--border);color:var(--accent-text)">↻ Reconnect Spotify</button>`
       : '<div class="sp-idle">Not connected to Spotify</div><button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Connect Spotify</button>';
     return;
   }
@@ -781,7 +789,7 @@ function renderFocusTabNowPlaying(info) {
 
   container.innerHTML = `
     <img class="sp-art-lg" src="${escH(info.albumArt)}" alt="${escH(info.albumName)}"
-         onerror="this.style.background='var(--bg-elevated)'">
+         onerror="this.style.background='var(--bg-elevated)';this.style.minHeight='60px'">
     <div class="sp-track-lg">${escH(info.trackName)}</div>
     <div class="sp-artist-lg">${escH(info.artistName)}</div>
     <div class="sp-progress-wrap" onclick="spSeek(event)" title="Click to seek">
@@ -813,8 +821,9 @@ function renderFocusTabNowPlaying(info) {
           title="${spIsLiked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}">
           ${svgHeart(spIsLiked)}
         </button>
-        <button class="sp-text-btn sp-save-btn${spAddMode ? ' active' : ''}" onclick="spToggleAddMode()">
-          ${svgAddToPlaylist(spAddMode)} + Playlist
+        <button class="sp-icon-btn sp-save-btn${spAddMode ? ' active' : ''}" onclick="spToggleAddMode()"
+          title="Add to playlist">
+          ${svgAddToPlaylist(spAddMode)}
         </button>
       </div>
     </div>
@@ -845,7 +854,7 @@ function spToggleVibe() {
 
   if (spVibeActive) {
     canvas.style.display = 'block';
-    requestAnimationFrame(() => { canvas.style.opacity = '0.5'; });
+    requestAnimationFrame(() => { canvas.style.opacity = '0.7'; });
     startVibeEngine(canvas);
   } else {
     canvas.style.opacity = '0';
@@ -909,7 +918,7 @@ function startVibeEngine(canvas) {
     for (let i = 0; i < rings; i++) {
       const ringPhase = (beatPhase + i / rings) % 1;
       const radius    = ringPhase * Math.max(W, H) * 0.5;
-      const alpha     = (1 - ringPhase) * pulse * 0.06;
+      const alpha     = (1 - ringPhase) * pulse * 0.15;
       ctx2d.beginPath();
       ctx2d.arc(W / 2, H / 2, radius, 0, Math.PI * 2);
       ctx2d.strokeStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
@@ -918,15 +927,15 @@ function startVibeEngine(canvas) {
     }
 
     // Sparse, very faint particles
-    if (frame % 8 === 0 && spIsPlaying) {
+    if (frame % 5 === 0 && spIsPlaying) {
       if (!spVibeEngineState.particles) spVibeEngineState.particles = [];
-      if (spVibeEngineState.particles.length < 60) {
+      if (spVibeEngineState.particles.length < 120) {
         spVibeEngineState.particles.push({
           x:     W * 0.15 + Math.random() * W * 0.7,
           y:     H + 10,
           size:  1 + Math.random() * 2.5 * pulse,
           speed: 0.3 + Math.random() * 0.8,
-          alpha: 0.04 + Math.random() * 0.08 * pulse,
+          alpha: 0.12 + Math.random() * 0.18 * pulse,
           drift: (Math.random() - 0.5) * 0.4,
         });
       }
@@ -1081,7 +1090,7 @@ function spToggleAddMode() {
   spAddMode = !spAddMode;
   document.querySelectorAll('.sp-save-btn').forEach(btn => {
     btn.classList.toggle('active', spAddMode);
-    btn.innerHTML = svgAddToPlaylist(spAddMode) + ' + Playlist';
+    btn.innerHTML = svgAddToPlaylist(spAddMode);
   });
   const panel  = document.getElementById('sp-playlists-list');
   const banner = document.getElementById('sp-add-banner');
