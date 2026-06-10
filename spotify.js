@@ -35,6 +35,8 @@ let spRepeatState      = 'off';
 let spCurrentTrackUri  = null;
 let spAddMode          = false;
 let spIsLiked          = false;
+let spVibeActive       = false;
+let spVibeRaf          = null;
 // Track whether we're showing last-played (so poll can replace it)
 let spShowingLastPlayed = false;
 
@@ -108,6 +110,11 @@ function svgAddToPlaylist(active) {
   return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="15" y2="6"></line><line x1="3" y1="10" x2="12" y2="10"></line><line x1="3" y1="14" x2="10" y2="14"></line><circle cx="18" cy="16" r="4"></circle><line x1="18" y1="13" x2="18" y2="19"></line><line x1="15" y1="16" x2="21" y2="16"></line></svg>`;
 }
 
+function svgVibe(active) {
+  const c = active ? '#C9913A' : 'currentColor';
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round"><line x1="4" y1="9" x2="4" y2="15"></line><line x1="8" y1="5" x2="8" y2="19"></line><line x1="12" y1="8" x2="12" y2="16"></line><line x1="16" y1="4" x2="16" y2="20"></line><line x1="20" y1="9" x2="20" y2="15"></line></svg>`;
+}
+
 // ── Inject tab ────────────────────────────────────────────
 function injectSpotifyTab() {
   const tabBar = document.querySelector('.tab-bar');
@@ -126,16 +133,19 @@ function injectSpotifyTab() {
     panel.id = 'tab-focus'; panel.className = 'tab-panel';
     panel.innerHTML = `
       <div class="focus-tab-grid">
-        <div class="sp-card">
-          <div class="dash-head" style="margin-bottom:.85rem">
+        <div class="sp-card" style="height:calc(100vh - 180px);min-height:620px;max-height:760px;display:flex;flex-direction:column;overflow:hidden;padding-top:22px;padding-bottom:28px;padding-left:28px;padding-right:28px">
+          <div class="dash-head" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:.75rem">
             <div class="dash-title">Now Playing</div>
+            <button id="sp-vibe-header-btn" class="sp-text-btn" onclick="spToggleVibe()" style="font-size:.58rem;padding:3px 8px;display:flex;align-items:center;gap:4px">
+              ${svgVibe(false)} Vibe
+            </button>
           </div>
-          <div id="sp-main-content">
+          <div id="sp-main-content" style="flex:1;min-height:0;display:flex;flex-direction:column">
             <div class="sp-idle">Not connected to Spotify</div>
             <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Connect Spotify</button>
           </div>
         </div>
-        <div class="pom-card">
+        <div class="pom-card" style="height:calc(100vh - 180px);min-height:620px;max-height:760px;display:flex;flex-direction:column;overflow:hidden">
           <div style="margin-bottom:1.1rem">
             <div class="dash-title" style="margin-bottom:.6rem">Pomodoro</div>
             <div class="pom-display" style="margin:.4rem 0 .7rem">
@@ -175,7 +185,115 @@ function injectSpotifyTab() {
             </div>
           </div>
         </div>
-      </div>`;
+      </div>
+      <canvas id="sp-vibe-canvas" style="position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:5;opacity:0;transition:opacity 1.2s ease;display:none"></canvas>`;
+// ── Vibe Mode ─────────────────────────────────────────────
+function spToggleVibe() {
+  spVibeActive = !spVibeActive;
+
+  document.querySelectorAll('.sp-vibe-btn, #sp-vibe-header-btn').forEach(btn => {
+    btn.innerHTML = svgVibe(spVibeActive) + ' Vibe';
+    btn.classList.toggle('active', spVibeActive);
+  });
+
+  const canvas = document.getElementById('sp-vibe-canvas');
+  if (spVibeActive) startVibeEngine(canvas);
+  else stopVibeEngine();
+}
+
+function startVibeEngine(canvas) {
+  stopVibeEngine();
+  spVibeActive = true;
+
+  const art = document.querySelector('.sp-art-lg');
+  const spCard = document.querySelector('#tab-focus .sp-card');
+  if (!spCard) return;
+
+  function sampleArtColor() {
+    if (!art || !art.complete || !art.naturalWidth) return [176, 120, 48];
+    try {
+      const tmp = document.createElement('canvas');
+      tmp.width = 8;
+      tmp.height = 8;
+      const ctx = tmp.getContext('2d');
+      ctx.drawImage(art, 0, 0, 8, 8);
+      const px = ctx.getImageData(2, 2, 4, 4).data;
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let i = 0; i < px.length; i += 4) {
+        r += px[i];
+        g += px[i + 1];
+        b += px[i + 2];
+        n++;
+      }
+      return [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
+    } catch(e) {
+      return [176, 120, 48];
+    }
+  }
+
+  let [r, g, b] = sampleArtColor();
+  if (art && !art.complete) {
+    art.addEventListener('load', () => {
+      [r, g, b] = sampleArtColor();
+      applyGlow();
+    }, { once: true });
+  }
+
+  function applyGlow() {
+    if (!spVibeActive) return;
+    spCard.style.transition = 'box-shadow 2s ease, background 2s ease';
+    spCard.style.boxShadow = `0 0 60px 12px rgba(${r},${g},${b},0.35), 0 0 120px 30px rgba(${r},${g},${b},0.15)`;
+    spCard.style.background = `linear-gradient(160deg, rgba(${r},${g},${b},0.08) 0%, var(--bg-card) 60%)`;
+  }
+
+  applyGlow();
+
+  const bpm = 120;
+  const msPerBeat = 60000 / bpm;
+
+  function tick() {
+    if (!spVibeActive) {
+      spVibeRaf = null;
+      return;
+    }
+    spVibeRaf = requestAnimationFrame(tick);
+
+    const elapsed = Date.now() - spLastPollTime;
+    const curPos = spLastProgress + (spIsPlaying ? elapsed : 0);
+    const phase = (curPos % msPerBeat) / msPerBeat;
+    const pulse = Math.pow(Math.sin(phase * Math.PI), 2) * (spIsPlaying ? 1 : 0.3);
+    const glow1 = (0.25 + pulse * 0.25).toFixed(3);
+    const glow2 = (0.10 + pulse * 0.12).toFixed(3);
+    const spread1 = Math.round(60 + pulse * 30);
+    const spread2 = Math.round(120 + pulse * 60);
+    const bgA = (0.06 + pulse * 0.08).toFixed(3);
+
+    spCard.style.boxShadow = `0 0 ${spread1}px 12px rgba(${r},${g},${b},${glow1}), 0 0 ${spread2}px 30px rgba(${r},${g},${b},${glow2})`;
+    spCard.style.background = `linear-gradient(160deg, rgba(${r},${g},${b},${bgA}) 0%, var(--bg-card) 65%)`;
+  }
+
+  tick();
+}
+
+function stopVibeEngine() {
+  if (spVibeRaf) {
+    cancelAnimationFrame(spVibeRaf);
+    spVibeRaf = null;
+  }
+
+  const spCard = document.querySelector('#tab-focus .sp-card');
+  if (spCard) {
+    spCard.style.transition = 'box-shadow 1s ease, background 1s ease';
+    spCard.style.boxShadow = '';
+    spCard.style.background = '';
+  }
+
+  const canvas = document.getElementById('sp-vibe-canvas');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+}
     app.appendChild(panel);
   }
 
@@ -189,9 +307,16 @@ function syncFocusCardHeights() {
   var sp  = document.querySelector('#tab-focus .sp-card');
   var pom = document.querySelector('#tab-focus .pom-card');
   if (!sp || !pom) return;
-  if (window.innerWidth <= 700) { pom.style.height = ''; return; }
-  var maxH = window.innerHeight - 216;
-  pom.style.height = Math.min(sp.offsetHeight, maxH) + 'px';
+
+  if (window.innerWidth <= 700) {
+    sp.style.height = '';
+    pom.style.height = '';
+    return;
+  }
+
+  var h = Math.max(620, Math.min(window.innerHeight - 180, 760));
+  sp.style.height = h + 'px';
+  pom.style.height = h + 'px';
 }
 
 function observeFocusCardHeight() {
@@ -604,30 +729,37 @@ function renderFocusTabNowPlaying(info) {
   const pct = info.duration ? (info.progress / info.duration) * 100 : 0;
   const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
   container.innerHTML = `
-    <img class="sp-art-lg" src="${escH(info.albumArt)}" alt="${escH(info.albumName)}" onerror="this.style.background='var(--bg-elevated)'">
-    <div class="sp-track-lg">${escH(info.trackName)}</div>
-    <div class="sp-artist-lg">${escH(info.artistName)}</div>
-    <div class="sp-progress-wrap" onclick="spSeek(event)" title="Click to seek">
-      <div class="sp-progress-bar" style="width:${pct.toFixed(2)}%"></div>
+    <div class="sp-art-lg-wrap" style="width:100%;height:435px;background:transparent;padding:0;margin:0;border-radius:14px;overflow:hidden;display:block;flex-shrink:0;box-shadow:0 14px 32px rgba(0,0,0,.16),0 4px 10px rgba(0,0,0,.12);line-height:0;font-size:0">
+      <img class="sp-art-lg" src="${escH(info.albumArt)}" alt="${escH(info.albumName)}" style="width:100%;height:100%;max-height:none;object-fit:cover;object-position:center center;display:block;border-radius:0;margin:0;padding:0;background:transparent" onerror="this.style.background='var(--bg-elevated)'">
     </div>
-    <div class="sp-time-row"><span>${fmt(info.progress)}</span><span>${fmt(info.duration)}</span></div>
-    <div class="sp-controls" style="flex-direction:column;gap:8px">
-      <div style="display:flex;align-items:center;justify-content:center;gap:16px">
-        <button class="sp-ctrl-btn" onclick="spPrev()" title="Previous">⏮</button>
-        <button class="sp-ctrl-btn play" onclick="spPlayPause()" title="${info.isPlaying?'Pause':'Play'}">${info.isPlaying ? '⏸' : '▶'}</button>
-        <button class="sp-ctrl-btn" onclick="spNext()" title="Next">⏭</button>
+    <div style="margin-top:15px;margin-bottom:2px;min-width:0">
+      <div class="sp-track-lg" style="font-size:1.04rem;line-height:1.12;margin:0 0 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(info.trackName)}</div>
+      <div class="sp-artist-lg" style="font-size:.72rem;line-height:1.25;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(info.artistName)}</div>
+    </div>
+    <div style="margin-top:auto;padding-top:0">
+      <div class="sp-progress-wrap" onclick="spSeek(event)" title="Click to seek" style="margin-top:3px;margin-bottom:5px">
+        <div class="sp-progress-bar" style="width:${pct.toFixed(2)}%"></div>
       </div>
-      <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:2px">
-        <button class="sp-icon-btn sp-shuffle-btn${spShuffleState ? ' active' : ''}" onclick="spToggleShuffle()" title="${spShuffleState ? 'Shuffle: On' : 'Shuffle: Off'}">${svgShuffle(spShuffleState)}</button>
-        <button class="sp-icon-btn sp-repeat-btn${spRepeatState !== 'off' ? ' active' : ''}" onclick="spCycleRepeat()" data-state="${spRepeatState}" title="${spRepeatState === 'track' ? 'Repeat: Track' : spRepeatState === 'context' ? 'Repeat: All' : 'Repeat: Off'}">${svgRepeat(spRepeatState)}</button>
-        <button class="sp-icon-btn sp-like-btn" onclick="spToggleLike()" title="${spIsLiked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}">${svgHeart(spIsLiked)}</button>
-        <button class="sp-icon-btn sp-save-btn${spAddMode ? ' active' : ''}" onclick="spToggleAddMode()" title="Add to playlist">${svgAddToPlaylist(spAddMode)}</button>
+      <div class="sp-time-row" style="margin-bottom:8px"><span>${fmt(info.progress)}</span><span>${fmt(info.duration)}</span></div>
+      <div class="sp-controls" style="flex-direction:column;gap:6px;margin-top:-5px;margin-bottom:0">
+        <div style="display:flex;align-items:center;justify-content:center;gap:16px">
+          <button class="sp-ctrl-btn" onclick="spPrev()" title="Previous">⏮</button>
+          <button class="sp-ctrl-btn play" onclick="spPlayPause()" title="${info.isPlaying?'Pause':'Play'}">${info.isPlaying ? '⏸' : '▶'}</button>
+          <button class="sp-ctrl-btn" onclick="spNext()" title="Next">⏭</button>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:2px">
+          <button class="sp-icon-btn sp-shuffle-btn${spShuffleState ? ' active' : ''}" onclick="spToggleShuffle()" title="${spShuffleState ? 'Shuffle: On' : 'Shuffle: Off'}">${svgShuffle(spShuffleState)}</button>
+          <button class="sp-icon-btn sp-repeat-btn${spRepeatState !== 'off' ? ' active' : ''}" onclick="spCycleRepeat()" data-state="${spRepeatState}" title="${spRepeatState === 'track' ? 'Repeat: Track' : spRepeatState === 'context' ? 'Repeat: All' : 'Repeat: Off'}">${svgRepeat(spRepeatState)}</button>
+          <button class="sp-icon-btn sp-like-btn" onclick="spToggleLike()" title="${spIsLiked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}">${svgHeart(spIsLiked)}</button>
+          <button class="sp-icon-btn sp-save-btn${spAddMode ? ' active' : ''}" onclick="spToggleAddMode()" title="Add to playlist">${svgAddToPlaylist(spAddMode)}</button>
+        </div>
       </div>
     </div>`;
   const wrap = container.querySelector('.sp-progress-wrap');
   if (wrap) { wrap.addEventListener('mouseenter', () => { wrap.style.height='6px'; }); wrap.addEventListener('mouseleave', () => { wrap.style.height=''; }); }
   const art = container.querySelector('.sp-art-lg');
   if (art) art.onload = () => { if (typeof syncFocusCardHeights === 'function') syncFocusCardHeights(); };
+  if (typeof syncFocusCardHeights === 'function') requestAnimationFrame(syncFocusCardHeights);
 }
 
 // ── Header widget ─────────────────────────────────────────
@@ -762,12 +894,16 @@ async function fetchLastPlayed() {
     if (!container) return;
     container.innerHTML = `
       <div style="position:relative">
-        <img class="sp-art-lg" src="${escH(item.album?.images?.[0]?.url || '')}" alt="${escH(item.name)}" onerror="this.style.background='var(--bg-elevated)'">
+        <div class="sp-art-lg-wrap" style="width:100%;height:435px;background:transparent;padding:0;margin:0;border-radius:14px;overflow:hidden;display:block;flex-shrink:0;box-shadow:0 14px 32px rgba(0,0,0,.16),0 4px 10px rgba(0,0,0,.12);line-height:0;font-size:0">
+          <img class="sp-art-lg" src="${escH(item.album?.images?.[0]?.url || '')}" alt="${escH(item.name)}" style="width:100%;height:100%;max-height:none;object-fit:cover;object-position:center center;display:block;border-radius:0;margin:0;padding:0;background:transparent" onerror="this.style.background='var(--bg-elevated)'">
+        </div>
         <div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.55);color:#fff;font-family:var(--font-mono);font-size:.58rem;padding:2px 7px;border-radius:3px;letter-spacing:.04em">LAST PLAYED</div>
       </div>
-      <div class="sp-track-lg">${escH(item.name)}</div>
-      <div class="sp-artist-lg">${escH(item.artists?.map(a => a.name).join(', ') || '')}</div>
-      <div class="sp-idle" style="padding:.6rem 0 .3rem;font-size:.68rem">Nothing playing · click a playlist to start</div>`;
+      <div style="margin-top:15px;margin-bottom:2px;min-width:0">
+        <div class="sp-track-lg" style="font-size:1.04rem;line-height:1.12;margin:0 0 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(item.name)}</div>
+        <div class="sp-artist-lg" style="font-size:.72rem;line-height:1.25;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(item.artists?.map(a => a.name).join(', ') || '')}</div>
+      </div>
+      <div class="sp-idle" style="margin-top:auto;padding:.8rem 0 .3rem;font-size:.68rem;text-align:center">Nothing playing · click a playlist to start</div>`;
   } catch(e) { console.warn('fetchLastPlayed:', e); }
 }
 
