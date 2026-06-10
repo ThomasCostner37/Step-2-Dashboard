@@ -790,6 +790,14 @@ select.input { cursor: pointer; }
                       border-radius:var(--r-md); font-family:var(--font-mono); font-size:.78rem;
                       font-weight:600; cursor:pointer; transition:background .15s; }
     .sp-connect-btn:hover { background:#1ed760; }
+    /* Device picker (Spotify Connect) */
+    .sp-device-item { font-family:var(--font-mono); font-size:.62rem; color:var(--text-secondary);
+                      padding:.4rem .55rem; cursor:pointer; border-bottom:1px solid var(--border);
+                      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:background .12s, color .12s; }
+    .sp-device-item:last-child { border-bottom:none; }
+    .sp-device-item:hover { background:var(--bg-elevated); color:var(--text-primary); }
+    #sp-device-btn { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:62%; }
+    #sp-volume { appearance:none; -webkit-appearance:none; background:var(--bg-elevated); border-radius:999px; }
     .sp-idle { font-family:var(--font-mono); font-size:.75rem; color:var(--text-tertiary);
                text-align:center; padding:2rem 1rem; }
 
