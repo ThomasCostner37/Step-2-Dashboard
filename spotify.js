@@ -126,16 +126,16 @@ function injectSpotifyTab() {
     panel.id = 'tab-focus'; panel.className = 'tab-panel';
     panel.innerHTML = `
       <div class="focus-tab-grid">
-        <div class="sp-card">
+        <div class="sp-card" style="height:calc(100vh - 220px);min-height:620px;max-height:760px;display:flex;flex-direction:column;overflow:hidden">
           <div class="dash-head" style="margin-bottom:.85rem">
             <div class="dash-title">Now Playing</div>
           </div>
-          <div id="sp-main-content">
+          <div id="sp-main-content" style="flex:1;min-height:0;display:flex;flex-direction:column">
             <div class="sp-idle">Not connected to Spotify</div>
             <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Connect Spotify</button>
           </div>
         </div>
-        <div class="pom-card">
+        <div class="pom-card" style="height:calc(100vh - 220px);min-height:620px;max-height:760px;display:flex;flex-direction:column;overflow:hidden">
           <div style="margin-bottom:1.1rem">
             <div class="dash-title" style="margin-bottom:.6rem">Pomodoro</div>
             <div class="pom-display" style="margin:.4rem 0 .7rem">
@@ -189,9 +189,16 @@ function syncFocusCardHeights() {
   var sp  = document.querySelector('#tab-focus .sp-card');
   var pom = document.querySelector('#tab-focus .pom-card');
   if (!sp || !pom) return;
-  if (window.innerWidth <= 700) { pom.style.height = ''; return; }
-  var maxH = window.innerHeight - 216;
-  pom.style.height = Math.min(sp.offsetHeight, maxH) + 'px';
+
+  if (window.innerWidth <= 700) {
+    sp.style.height = '';
+    pom.style.height = '';
+    return;
+  }
+
+  var h = Math.max(620, Math.min(window.innerHeight - 220, 760));
+  sp.style.height = h + 'px';
+  pom.style.height = h + 'px';
 }
 
 function observeFocusCardHeight() {
@@ -604,7 +611,9 @@ function renderFocusTabNowPlaying(info) {
   const pct = info.duration ? (info.progress / info.duration) * 100 : 0;
   const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
   container.innerHTML = `
-    <img class="sp-art-lg" src="${escH(info.albumArt)}" alt="${escH(info.albumName)}" onerror="this.style.background='var(--bg-elevated)'">
+    <div class="sp-art-lg-wrap" style="width:100%;aspect-ratio:1 / 1;background:#050505;border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">
+      <img class="sp-art-lg" src="${escH(info.albumArt)}" alt="${escH(info.albumName)}" style="width:100%;height:100%;object-fit:contain;display:block" onerror="this.style.background='var(--bg-elevated)'">
+    </div>
     <div class="sp-track-lg">${escH(info.trackName)}</div>
     <div class="sp-artist-lg">${escH(info.artistName)}</div>
     <div class="sp-progress-wrap" onclick="spSeek(event)" title="Click to seek">
@@ -628,6 +637,7 @@ function renderFocusTabNowPlaying(info) {
   if (wrap) { wrap.addEventListener('mouseenter', () => { wrap.style.height='6px'; }); wrap.addEventListener('mouseleave', () => { wrap.style.height=''; }); }
   const art = container.querySelector('.sp-art-lg');
   if (art) art.onload = () => { if (typeof syncFocusCardHeights === 'function') syncFocusCardHeights(); };
+  if (typeof syncFocusCardHeights === 'function') requestAnimationFrame(syncFocusCardHeights);
 }
 
 // ── Header widget ─────────────────────────────────────────
@@ -762,7 +772,9 @@ async function fetchLastPlayed() {
     if (!container) return;
     container.innerHTML = `
       <div style="position:relative">
-        <img class="sp-art-lg" src="${escH(item.album?.images?.[0]?.url || '')}" alt="${escH(item.name)}" onerror="this.style.background='var(--bg-elevated)'">
+        <div class="sp-art-lg-wrap" style="width:100%;aspect-ratio:1 / 1;background:#050505;border-radius:var(--r-md);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">
+          <img class="sp-art-lg" src="${escH(item.album?.images?.[0]?.url || '')}" alt="${escH(item.name)}" style="width:100%;height:100%;object-fit:contain;display:block" onerror="this.style.background='var(--bg-elevated)'">
+        </div>
         <div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.55);color:#fff;font-family:var(--font-mono);font-size:.58rem;padding:2px 7px;border-radius:3px;letter-spacing:.04em">LAST PLAYED</div>
       </div>
       <div class="sp-track-lg">${escH(item.name)}</div>
