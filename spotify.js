@@ -611,10 +611,10 @@ function renderFocusTabNowPlaying(info) {
   const pct = info.duration ? (info.progress / info.duration) * 100 : 0;
   const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
   container.innerHTML = `
-    <div class="sp-art-lg-wrap" style="width:100%;background:transparent;border-radius:var(--r-md);overflow:hidden;flex-shrink:0;box-shadow:0 10px 26px rgba(0,0,0,.12);line-height:0;font-size:0">
-      <img class="sp-art-lg" src="${escH(info.albumArt)}" alt="${escH(info.albumName)}" style="width:100%;height:auto;max-height:435px;object-fit:contain;display:block;vertical-align:top;border-radius:var(--r-md)" onerror="this.style.background='var(--bg-elevated)'">
+    <div class="sp-art-lg-wrap" style="width:100%;background:transparent;border-radius:var(--r-md);overflow:hidden;flex-shrink:0;box-shadow:0 10px 26px rgba(0,0,0,.12);line-height:0;font-size:0;max-height:435px">
+      <img class="sp-art-lg" src="${escH(info.albumArt)}" alt="${escH(info.albumName)}" style="width:100%;height:auto;max-height:435px;object-fit:contain;display:block;vertical-align:top;border-radius:var(--r-md);margin-bottom:-8px" onerror="this.style.background='var(--bg-elevated)'">
     </div>
-    <div style="margin-top:.22rem;margin-bottom:.42rem;min-width:0">
+    <div style="margin-top:.12rem;margin-bottom:.42rem;min-width:0">
       <div class="sp-track-lg" style="font-size:1.04rem;line-height:1.12;margin:0 0 .18rem 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(info.trackName)}</div>
       <div class="sp-artist-lg" style="font-size:.72rem;line-height:1.25;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(info.artistName)}</div>
     </div>
@@ -776,12 +776,12 @@ async function fetchLastPlayed() {
     if (!container) return;
     container.innerHTML = `
       <div style="position:relative">
-        <div class="sp-art-lg-wrap" style="width:100%;background:transparent;border-radius:var(--r-md);overflow:hidden;flex-shrink:0;line-height:0;font-size:0">
-          <img class="sp-art-lg" src="${escH(item.album?.images?.[0]?.url || '')}" alt="${escH(item.name)}" style="width:100%;height:auto;max-height:435px;object-fit:contain;display:block;vertical-align:top;border-radius:var(--r-md)" onerror="this.style.background='var(--bg-elevated)'">
+        <div class="sp-art-lg-wrap" style="width:100%;background:transparent;border-radius:var(--r-md);overflow:hidden;flex-shrink:0;line-height:0;font-size:0;max-height:435px">
+          <img class="sp-art-lg" src="${escH(item.album?.images?.[0]?.url || '')}" alt="${escH(item.name)}" style="width:100%;height:auto;max-height:435px;object-fit:contain;display:block;vertical-align:top;border-radius:var(--r-md);margin-bottom:-8px" onerror="this.style.background='var(--bg-elevated)'">
         </div>
         <div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.55);color:#fff;font-family:var(--font-mono);font-size:.58rem;padding:2px 7px;border-radius:3px;letter-spacing:.04em">LAST PLAYED</div>
       </div>
-      <div style="margin-top:.22rem;margin-bottom:.42rem;min-width:0">
+      <div style="margin-top:.12rem;margin-bottom:.42rem;min-width:0">
         <div class="sp-track-lg" style="font-size:1.04rem;line-height:1.12;margin:0 0 .18rem 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(item.name)}</div>
         <div class="sp-artist-lg" style="font-size:.72rem;line-height:1.25;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(item.artists?.map(a => a.name).join(', ') || '')}</div>
       </div>
