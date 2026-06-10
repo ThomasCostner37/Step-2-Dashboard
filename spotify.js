@@ -21,11 +21,9 @@ const SPOTIFY_SCOPES      = [
 ].join(' ');
 
 let spToken        = null;
-let spPlayer       = null;
-let spDeviceId     = null;
 let spPollTimer        = null;
 let spCurrentTrack     = null;
-let spInterpolateTimer = null;
+let spProgressRaf      = null;
 let spLastPollTime     = null;
 let spLastProgress     = 0;
 let spLastDuration     = 0;
@@ -35,8 +33,6 @@ let spRepeatState      = 'off';
 let spCurrentTrackUri  = null;
 let spAddMode          = false;
 let spIsLiked          = false;
-let spVibeActive       = false;
-let spVibeRaf          = null;
 // Track whether we're showing last-played (so poll can replace it)
 let spShowingLastPlayed = false;
 
@@ -110,11 +106,6 @@ function svgAddToPlaylist(active) {
   return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="15" y2="6"></line><line x1="3" y1="10" x2="12" y2="10"></line><line x1="3" y1="14" x2="10" y2="14"></line><circle cx="18" cy="16" r="4"></circle><line x1="18" y1="13" x2="18" y2="19"></line><line x1="15" y1="16" x2="21" y2="16"></line></svg>`;
 }
 
-function svgVibe(active) {
-  const c = active ? '#C9913A' : 'currentColor';
-  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round"><line x1="4" y1="9" x2="4" y2="15"></line><line x1="8" y1="5" x2="8" y2="19"></line><line x1="12" y1="8" x2="12" y2="16"></line><line x1="16" y1="4" x2="16" y2="20"></line><line x1="20" y1="9" x2="20" y2="15"></line></svg>`;
-}
-
 // ── Inject tab ────────────────────────────────────────────
 function injectSpotifyTab() {
   const tabBar = document.querySelector('.tab-bar');
@@ -134,11 +125,8 @@ function injectSpotifyTab() {
     panel.innerHTML = `
       <div class="focus-tab-grid">
         <div class="sp-card" style="height:calc(100vh - 180px);min-height:620px;max-height:760px;display:flex;flex-direction:column;overflow:hidden;padding-top:22px;padding-bottom:28px;padding-left:28px;padding-right:28px">
-          <div class="dash-head" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:.75rem">
+          <div class="dash-head" style="margin-bottom:10px">
             <div class="dash-title">Now Playing</div>
-            <button id="sp-vibe-header-btn" class="sp-text-btn" onclick="spToggleVibe()" style="font-size:.58rem;padding:3px 8px;display:flex;align-items:center;gap:4px">
-              ${svgVibe(false)} Vibe
-            </button>
           </div>
           <div id="sp-main-content" style="flex:1;min-height:0;display:flex;flex-direction:column">
             <div class="sp-idle">Not connected to Spotify</div>
@@ -179,121 +167,13 @@ function injectSpotifyTab() {
               <div id="focus-quote-text" style="font-family:var(--font-display);font-style:italic;font-size:1.45rem;color:var(--text-secondary);line-height:1.75;transition:opacity .5s ease;margin-bottom:1rem;text-align:center"></div>
               <div id="focus-quote-attr" style="font-family:var(--font-mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--text-tertiary);transition:opacity .5s ease;text-align:center"></div>
             </div>
-            <div style="display:flex;gap:8px;justify-content:center;padding-bottom:.5rem">
+            <div class="quote-nav-btns" style="display:flex;gap:8px;justify-content:center;padding-bottom:.5rem">
               <button class="btn btn-ghost btn-sm" onclick="prevFocusQuote()">‹ Prev</button>
               <button class="btn btn-ghost btn-sm" onclick="nextFocusQuote()">Next ›</button>
             </div>
           </div>
         </div>
-      </div>
-      <canvas id="sp-vibe-canvas" style="position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:5;opacity:0;transition:opacity 1.2s ease;display:none"></canvas>`;
-// ── Vibe Mode ─────────────────────────────────────────────
-function spToggleVibe() {
-  spVibeActive = !spVibeActive;
-
-  document.querySelectorAll('.sp-vibe-btn, #sp-vibe-header-btn').forEach(btn => {
-    btn.innerHTML = svgVibe(spVibeActive) + ' Vibe';
-    btn.classList.toggle('active', spVibeActive);
-  });
-
-  const canvas = document.getElementById('sp-vibe-canvas');
-  if (spVibeActive) startVibeEngine(canvas);
-  else stopVibeEngine();
-}
-
-function startVibeEngine(canvas) {
-  stopVibeEngine();
-  spVibeActive = true;
-
-  const art = document.querySelector('.sp-art-lg');
-  const spCard = document.querySelector('#tab-focus .sp-card');
-  if (!spCard) return;
-
-  function sampleArtColor() {
-    if (!art || !art.complete || !art.naturalWidth) return [176, 120, 48];
-    try {
-      const tmp = document.createElement('canvas');
-      tmp.width = 8;
-      tmp.height = 8;
-      const ctx = tmp.getContext('2d');
-      ctx.drawImage(art, 0, 0, 8, 8);
-      const px = ctx.getImageData(2, 2, 4, 4).data;
-      let r = 0, g = 0, b = 0, n = 0;
-      for (let i = 0; i < px.length; i += 4) {
-        r += px[i];
-        g += px[i + 1];
-        b += px[i + 2];
-        n++;
-      }
-      return [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
-    } catch(e) {
-      return [176, 120, 48];
-    }
-  }
-
-  let [r, g, b] = sampleArtColor();
-  if (art && !art.complete) {
-    art.addEventListener('load', () => {
-      [r, g, b] = sampleArtColor();
-      applyGlow();
-    }, { once: true });
-  }
-
-  function applyGlow() {
-    if (!spVibeActive) return;
-    spCard.style.transition = 'box-shadow 2s ease, background 2s ease';
-    spCard.style.boxShadow = `0 0 60px 12px rgba(${r},${g},${b},0.35), 0 0 120px 30px rgba(${r},${g},${b},0.15)`;
-    spCard.style.background = `linear-gradient(160deg, rgba(${r},${g},${b},0.08) 0%, var(--bg-card) 60%)`;
-  }
-
-  applyGlow();
-
-  const bpm = 120;
-  const msPerBeat = 60000 / bpm;
-
-  function tick() {
-    if (!spVibeActive) {
-      spVibeRaf = null;
-      return;
-    }
-    spVibeRaf = requestAnimationFrame(tick);
-
-    const elapsed = Date.now() - spLastPollTime;
-    const curPos = spLastProgress + (spIsPlaying ? elapsed : 0);
-    const phase = (curPos % msPerBeat) / msPerBeat;
-    const pulse = Math.pow(Math.sin(phase * Math.PI), 2) * (spIsPlaying ? 1 : 0.3);
-    const glow1 = (0.25 + pulse * 0.25).toFixed(3);
-    const glow2 = (0.10 + pulse * 0.12).toFixed(3);
-    const spread1 = Math.round(60 + pulse * 30);
-    const spread2 = Math.round(120 + pulse * 60);
-    const bgA = (0.06 + pulse * 0.08).toFixed(3);
-
-    spCard.style.boxShadow = `0 0 ${spread1}px 12px rgba(${r},${g},${b},${glow1}), 0 0 ${spread2}px 30px rgba(${r},${g},${b},${glow2})`;
-    spCard.style.background = `linear-gradient(160deg, rgba(${r},${g},${b},${bgA}) 0%, var(--bg-card) 65%)`;
-  }
-
-  tick();
-}
-
-function stopVibeEngine() {
-  if (spVibeRaf) {
-    cancelAnimationFrame(spVibeRaf);
-    spVibeRaf = null;
-  }
-
-  const spCard = document.querySelector('#tab-focus .sp-card');
-  if (spCard) {
-    spCard.style.transition = 'box-shadow 1s ease, background 1s ease';
-    spCard.style.boxShadow = '';
-    spCard.style.background = '';
-  }
-
-  const canvas = document.getElementById('sp-vibe-canvas');
-  if (canvas) {
-    const ctx = canvas.getContext('2d');
-    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
-  }
-}
+      </div>`;
     app.appendChild(panel);
   }
 
@@ -425,32 +305,21 @@ async function fetchSpotifyPlaylists() {
 async function playSpotifyPlaylist(uri, name) {
   if (!spToken) return;
   try {
-    // Step 1: activate the browser player (required by autoplay policy)
-    if (spPlayer) await spPlayer.activateElement();
-
-    // Step 2: if we have a browser device, transfer playback to it first
-    if (spDeviceId) {
-      await fetch('https://api.spotify.com/v1/me/player', {
-        method: 'PUT',
-        headers: { 'Authorization': `Bearer ${spToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device_ids: [spDeviceId], play: false }),
-      });
-      // Give Spotify a moment to register the transfer
-      await new Promise(r => setTimeout(r, 400));
-    }
-
-    // Step 3: play the playlist
-    const body = { context_uri: uri };
-    if (spDeviceId) body.device_id = spDeviceId;
-    await fetch('https://api.spotify.com/v1/me/player/play', {
+    const resp = await fetch('https://api.spotify.com/v1/me/player/play', {
       method: 'PUT',
       headers: { 'Authorization': `Bearer ${spToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ context_uri: uri }),
     });
+    if (!resp.ok) {
+      // No active device (404) etc — open Spotify so a device wakes up
+      window.open('https://open.spotify.com/playlist/' + uri.split(':')[2], '_blank');
+      return;
+    }
     spShowingLastPlayed = false;
+    spCurrentTrackUri = null;
     setTimeout(fetchNowPlaying, 800);
   } catch(e) {
-    window.open(`https://open.spotify.com/playlist/${uri.split(':')[2]}`, '_blank');
+    window.open('https://open.spotify.com/playlist/' + uri.split(':')[2], '_blank');
   }
 }
 
@@ -493,7 +362,6 @@ async function exchangeSpotifyCode(code) {
     if (data.refresh_token) localStorage.setItem('sp_refresh', data.refresh_token);
     localStorage.removeItem('sp_verifier');
     window.history.replaceState({}, '', window.location.pathname);
-    initSpotifyPlayer();
     startSpotifyPoll();
     setTimeout(fetchSpotifyPlaylists, 1500);
     const pending = localStorage.getItem('sp_pending_add');
@@ -532,44 +400,37 @@ function initSpotify() {
   const saved = localStorage.getItem('sp_token');
   if (saved) {
     spToken = saved;
-    initSpotifyPlayer();
     startSpotifyPoll();
-    // fetchNowPlaying will show last-played on 204 — no separate timer needed
   }
-  if (!window.Spotify && !document.getElementById('sp-sdk')) {
-    const script = document.createElement('script');
-    script.id = 'sp-sdk'; script.src = 'https://sdk.scdn.co/spotify-player.js';
-    document.head.appendChild(script);
-  }
-}
-
-// ── Web Playback SDK ──────────────────────────────────────
-window.onSpotifyWebPlaybackSDKReady = function() { if (!spToken) return; initSpotifyPlayer(); };
-
-function initSpotifyPlayer() {
-  if (!window.Spotify || !spToken || spPlayer) return;
-  spPlayer = new Spotify.Player({ name: 'Step 2 Dashboard', getOAuthToken: cb => cb(spToken), volume: 0.8 });
-  spPlayer.addListener('ready', ({ device_id }) => { spDeviceId = device_id; });
-  spPlayer.addListener('player_state_changed', state => { if (!state) return; updateNowPlayingFromSDK(state); });
-  spPlayer.addListener('authentication_error', async () => { const ok = await refreshSpotifyToken(); if (ok) initSpotifyPlayer(); });
-  spPlayer.connect();
 }
 
 // ── Polling ───────────────────────────────────────────────
 function startSpotifyPoll() {
   clearInterval(spPollTimer);
-  clearInterval(spInterpolateTimer);
+  cancelAnimationFrame(spProgressRaf);
   fetchNowPlaying();
   fetchSpotifyPlaylists();
-  spPollTimer = setInterval(fetchNowPlaying, 10000);
-  spInterpolateTimer = setInterval(() => {
+  spPollTimer = setInterval(fetchNowPlaying, 3000);
+  // Smooth progress: drive the bar every animation frame instead of in 1s jumps
+  var lastSec = -1;
+  var fmt = function(ms) { var s = Math.floor(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+  var animate = function() {
+    spProgressRaf = requestAnimationFrame(animate);
     if (!spIsPlaying || !spLastDuration) return;
-    const interpolated = Math.min(spLastProgress + (Date.now() - spLastPollTime), spLastDuration);
-    const bar = document.querySelector('.sp-progress-bar');
-    if (bar) bar.style.width = ((interpolated / spLastDuration) * 100).toFixed(2) + '%';
-    const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
-    document.querySelectorAll('.sp-time-row').forEach(row => { const span = row.querySelector('span:first-child'); if (span) span.textContent = fmt(interpolated); });
-  }, 1000);
+    var interpolated = Math.min(spLastProgress + (Date.now() - spLastPollTime), spLastDuration);
+    var bar = document.querySelector('.sp-progress-bar');
+    if (bar) bar.style.width = ((interpolated / spLastDuration) * 100).toFixed(3) + '%';
+    var sec = Math.floor(interpolated / 1000);
+    if (sec !== lastSec) {
+      lastSec = sec;
+      var rows = document.querySelectorAll('.sp-time-row');
+      for (var i = 0; i < rows.length; i++) {
+        var span = rows[i].querySelector('span:first-child');
+        if (span) span.textContent = fmt(interpolated);
+      }
+    }
+  };
+  spProgressRaf = requestAnimationFrame(animate);
 }
 
 async function fetchNowPlaying() {
@@ -677,25 +538,6 @@ function updateShuffleRepeatButtons() {
   document.querySelectorAll('.sp-repeat-btn').forEach(btn => { btn.innerHTML = svgRepeat(spRepeatState); btn.setAttribute('data-state', spRepeatState); btn.classList.toggle('active', spRepeatState !== 'off'); btn.title = spRepeatState === 'track' ? 'Repeat: Track' : spRepeatState === 'context' ? 'Repeat: All' : 'Repeat: Off'; });
 }
 
-// ── SDK state update ──────────────────────────────────────
-function updateNowPlayingFromSDK(sdkState) {
-  if (!sdkState || !sdkState.track_window) return;
-  const track = sdkState.track_window.current_track;
-  const newUri = track.uri;
-  spLastProgress = sdkState.position || 0; spLastDuration = sdkState.duration || 0;
-  spLastPollTime = Date.now(); spIsPlaying = !sdkState.paused;
-  if (newUri === spCurrentTrack?.item?.uri && newUri !== undefined) { updatePlayPauseButtons(spIsPlaying); return; }
-  spShowingLastPlayed = false;
-  checkLikedState(newUri);
-  const isEpisode = track.type === 'episode';
-  renderNowPlayingDirect({
-    isPlaying: !sdkState.paused, trackName: track.name,
-    artistName: isEpisode ? (track.album?.name || 'Podcast') : (track.artists?.map(a => a.name).join(', ') || ''),
-    albumArt: track.album?.images?.[0]?.url || '', albumName: track.album?.name || '',
-    progress: sdkState.position, duration: sdkState.duration, trackUri: track.uri,
-  });
-}
-
 // ── Render pipeline ───────────────────────────────────────
 function renderNowPlaying(data) {
   if (!data || !data.item) { renderNowPlayingDirect(null); return; }
@@ -740,14 +582,14 @@ function renderFocusTabNowPlaying(info) {
       <div class="sp-progress-wrap" onclick="spSeek(event)" title="Click to seek" style="margin-top:3px;margin-bottom:5px">
         <div class="sp-progress-bar" style="width:${pct.toFixed(2)}%"></div>
       </div>
-      <div class="sp-time-row" style="margin-bottom:8px"><span>${fmt(info.progress)}</span><span>${fmt(info.duration)}</span></div>
-      <div class="sp-controls" style="flex-direction:column;gap:6px;margin-top:-5px;margin-bottom:0">
+      <div class="sp-time-row" style="margin-bottom:6px"><span>${fmt(info.progress)}</span><span>${fmt(info.duration)}</span></div>
+      <div class="sp-controls" style="flex-direction:column;gap:8px;margin-top:0;margin-bottom:0">
         <div style="display:flex;align-items:center;justify-content:center;gap:16px">
           <button class="sp-ctrl-btn" onclick="spPrev()" title="Previous">⏮</button>
           <button class="sp-ctrl-btn play" onclick="spPlayPause()" title="${info.isPlaying?'Pause':'Play'}">${info.isPlaying ? '⏸' : '▶'}</button>
           <button class="sp-ctrl-btn" onclick="spNext()" title="Next">⏭</button>
         </div>
-        <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:2px">
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:0">
           <button class="sp-icon-btn sp-shuffle-btn${spShuffleState ? ' active' : ''}" onclick="spToggleShuffle()" title="${spShuffleState ? 'Shuffle: On' : 'Shuffle: Off'}">${svgShuffle(spShuffleState)}</button>
           <button class="sp-icon-btn sp-repeat-btn${spRepeatState !== 'off' ? ' active' : ''}" onclick="spCycleRepeat()" data-state="${spRepeatState}" title="${spRepeatState === 'track' ? 'Repeat: Track' : spRepeatState === 'context' ? 'Repeat: All' : 'Repeat: Off'}">${svgRepeat(spRepeatState)}</button>
           <button class="sp-icon-btn sp-like-btn" onclick="spToggleLike()" title="${spIsLiked ? 'Remove from Liked Songs' : 'Save to Liked Songs'}">${svgHeart(spIsLiked)}</button>
@@ -802,24 +644,22 @@ function ensureHeaderWidgets() {
 // ── Playback controls ─────────────────────────────────────
 async function spPlayPause() {
   if (!spToken) return;
-  if (spPlayer) { spPlayer.togglePlay(); return; }
   const state = await fetch('https://api.spotify.com/v1/me/player', { headers: { 'Authorization': `Bearer ${spToken}` } }).then(r => r.json()).catch(() => null);
-  await fetch(`https://api.spotify.com/v1/me/player/${state?.is_playing ? 'pause' : 'play'}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${spToken}` }, body: spDeviceId ? JSON.stringify({ device_id: spDeviceId }) : undefined });
-  setTimeout(fetchNowPlaying, 500);
+  const playing = state && state.is_playing;
+  await fetch(`https://api.spotify.com/v1/me/player/${playing ? 'pause' : 'play'}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${spToken}` } });
+  setTimeout(fetchNowPlaying, 400);
 }
 
 async function spNext() {
   if (!spToken) return;
-  if (spPlayer) { spPlayer.nextTrack(); return; }
   await fetch('https://api.spotify.com/v1/me/player/next', { method: 'POST', headers: { 'Authorization': `Bearer ${spToken}` } });
-  spCurrentTrack = null; setTimeout(fetchNowPlaying, 500);
+  spCurrentTrackUri = null; setTimeout(fetchNowPlaying, 400);
 }
 
 async function spPrev() {
   if (!spToken) return;
-  if (spPlayer) { spPlayer.previousTrack(); return; }
   await fetch('https://api.spotify.com/v1/me/player/previous', { method: 'POST', headers: { 'Authorization': `Bearer ${spToken}` } });
-  spCurrentTrackUri = null; setTimeout(fetchNowPlaying, 500);
+  spCurrentTrackUri = null; setTimeout(fetchNowPlaying, 400);
 }
 
 async function spToggleShuffle() {

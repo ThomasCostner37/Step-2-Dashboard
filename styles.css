@@ -746,7 +746,6 @@ select.input { cursor: pointer; }
   color:var(--text-tertiary);
   flex-shrink:0;
 }
-  #sp-vibe-canvas { z-index: 50 !important; }
     /* Now Playing card */
     .sp-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.25rem; overflow:hidden;
                display:flex; flex-direction:column; }
@@ -757,7 +756,7 @@ select.input { cursor: pointer; }
     .sp-artist-lg { font-family:var(--font-mono); font-size:.75rem; color:var(--text-tertiary); margin-bottom:.85rem; }
     .sp-progress-wrap { height:3px; background:var(--bg-elevated); border-radius:999px; margin-bottom:.5rem; overflow:visible; position:relative; cursor:pointer; transition:height .15s ease; }
     .sp-progress-wrap:hover { height:6px; }
-    /* NOTE: no CSS transition on progress bar — interpolator drives it smoothly at 1s intervals */
+    /* NOTE: no CSS transition on progress bar — requestAnimationFrame drives width every frame */
     .sp-progress-bar  { height:100%; background:#1DB954; border-radius:999px; }
     .sp-time-row { display:flex; justify-content:space-between; font-family:var(--font-mono);
                    font-size:.58rem; color:var(--text-tertiary); margin-bottom:1rem; }
@@ -814,7 +813,8 @@ select.input { cursor: pointer; }
     .pom-btn.primary:hover { background:rgba(176,120,48,.18); border-color:var(--accent); }
     .pom-btn.danger { background:rgba(184,58,32,.08); border-color:rgba(184,58,32,.2); color:#B83A20; }
 
-    /* Quote nav ghost buttons */
+    /* Quote nav ghost buttons — hidden until you hover the quote */
+    .quote-nav-btns { opacity:0; transition:opacity .25s ease; }
     #focus-quotes-panel:hover .quote-nav-btns { opacity:1 !important; }
 
     .mood-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
