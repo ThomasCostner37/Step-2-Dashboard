@@ -126,8 +126,8 @@ function injectSpotifyTab() {
     panel.id = 'tab-focus'; panel.className = 'tab-panel';
     panel.innerHTML = `
       <div class="focus-tab-grid">
-        <div class="sp-card" style="height:calc(100vh - 180px);min-height:620px;max-height:760px;display:flex;flex-direction:column;overflow:hidden">
-          <div class="dash-head" style="margin-bottom:.42rem">
+        <div class="sp-card" style="height:calc(100vh - 180px);min-height:620px;max-height:760px;display:flex;flex-direction:column;overflow:hidden;padding-top:22px;padding-bottom:28px;padding-left:28px;padding-right:28px">
+          <div class="dash-head" style="margin-bottom:10px">
             <div class="dash-title">Now Playing</div>
           </div>
           <div id="sp-main-content" style="flex:1;min-height:0;display:flex;flex-direction:column">
@@ -611,19 +611,19 @@ function renderFocusTabNowPlaying(info) {
   const pct = info.duration ? (info.progress / info.duration) * 100 : 0;
   const fmt = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
   container.innerHTML = `
-    <div class="sp-art-lg-wrap" style="width:100%;background:transparent;border-radius:var(--r-md);overflow:hidden;flex-shrink:0;box-shadow:0 10px 26px rgba(0,0,0,.12);line-height:0;font-size:0;max-height:435px">
-      <img class="sp-art-lg" src="${escH(info.albumArt)}" alt="${escH(info.albumName)}" style="width:100%;height:auto;max-height:435px;object-fit:contain;display:block;vertical-align:top;border-radius:var(--r-md);margin-bottom:-8px" onerror="this.style.background='var(--bg-elevated)'">
+    <div class="sp-art-lg-wrap" style="width:100%;height:435px;background:transparent;padding:0;margin:0;border-radius:14px;overflow:hidden;display:block;flex-shrink:0;box-shadow:0 14px 32px rgba(0,0,0,.16),0 4px 10px rgba(0,0,0,.12);line-height:0;font-size:0">
+      <img class="sp-art-lg" src="${escH(info.albumArt)}" alt="${escH(info.albumName)}" style="width:100%;height:100%;max-height:none;object-fit:cover;object-position:center center;display:block;border-radius:0;margin:0;padding:0;background:transparent" onerror="this.style.background='var(--bg-elevated)'">
     </div>
-    <div style="margin-top:.12rem;margin-bottom:.42rem;min-width:0">
-      <div class="sp-track-lg" style="font-size:1.04rem;line-height:1.12;margin:0 0 .18rem 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(info.trackName)}</div>
+    <div style="margin-top:15px;margin-bottom:2px;min-width:0">
+      <div class="sp-track-lg" style="font-size:1.04rem;line-height:1.12;margin:0 0 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(info.trackName)}</div>
       <div class="sp-artist-lg" style="font-size:.72rem;line-height:1.25;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(info.artistName)}</div>
     </div>
-    <div style="margin-top:auto;padding-top:.06rem">
-      <div class="sp-progress-wrap" onclick="spSeek(event)" title="Click to seek" style="margin-bottom:.28rem">
+    <div style="margin-top:auto;padding-top:0">
+      <div class="sp-progress-wrap" onclick="spSeek(event)" title="Click to seek" style="margin-top:3px;margin-bottom:5px">
         <div class="sp-progress-bar" style="width:${pct.toFixed(2)}%"></div>
       </div>
-      <div class="sp-time-row" style="margin-bottom:.48rem"><span>${fmt(info.progress)}</span><span>${fmt(info.duration)}</span></div>
-      <div class="sp-controls" style="flex-direction:column;gap:8px;margin-top:0">
+      <div class="sp-time-row" style="margin-bottom:8px"><span>${fmt(info.progress)}</span><span>${fmt(info.duration)}</span></div>
+      <div class="sp-controls" style="flex-direction:column;gap:6px;margin-top:-5px;margin-bottom:0">
         <div style="display:flex;align-items:center;justify-content:center;gap:16px">
           <button class="sp-ctrl-btn" onclick="spPrev()" title="Previous">⏮</button>
           <button class="sp-ctrl-btn play" onclick="spPlayPause()" title="${info.isPlaying?'Pause':'Play'}">${info.isPlaying ? '⏸' : '▶'}</button>
@@ -776,13 +776,13 @@ async function fetchLastPlayed() {
     if (!container) return;
     container.innerHTML = `
       <div style="position:relative">
-        <div class="sp-art-lg-wrap" style="width:100%;background:transparent;border-radius:var(--r-md);overflow:hidden;flex-shrink:0;line-height:0;font-size:0;max-height:435px">
-          <img class="sp-art-lg" src="${escH(item.album?.images?.[0]?.url || '')}" alt="${escH(item.name)}" style="width:100%;height:auto;max-height:435px;object-fit:contain;display:block;vertical-align:top;border-radius:var(--r-md);margin-bottom:-8px" onerror="this.style.background='var(--bg-elevated)'">
+        <div class="sp-art-lg-wrap" style="width:100%;height:435px;background:transparent;padding:0;margin:0;border-radius:14px;overflow:hidden;display:block;flex-shrink:0;box-shadow:0 14px 32px rgba(0,0,0,.16),0 4px 10px rgba(0,0,0,.12);line-height:0;font-size:0">
+          <img class="sp-art-lg" src="${escH(item.album?.images?.[0]?.url || '')}" alt="${escH(item.name)}" style="width:100%;height:100%;max-height:none;object-fit:cover;object-position:center center;display:block;border-radius:0;margin:0;padding:0;background:transparent" onerror="this.style.background='var(--bg-elevated)'">
         </div>
         <div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.55);color:#fff;font-family:var(--font-mono);font-size:.58rem;padding:2px 7px;border-radius:3px;letter-spacing:.04em">LAST PLAYED</div>
       </div>
-      <div style="margin-top:.12rem;margin-bottom:.42rem;min-width:0">
-        <div class="sp-track-lg" style="font-size:1.04rem;line-height:1.12;margin:0 0 .18rem 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(item.name)}</div>
+      <div style="margin-top:15px;margin-bottom:2px;min-width:0">
+        <div class="sp-track-lg" style="font-size:1.04rem;line-height:1.12;margin:0 0 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(item.name)}</div>
         <div class="sp-artist-lg" style="font-size:.72rem;line-height:1.25;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(item.artists?.map(a => a.name).join(', ') || '')}</div>
       </div>
       <div class="sp-idle" style="margin-top:auto;padding:.8rem 0 .3rem;font-size:.68rem;text-align:center">Nothing playing · click a playlist to start</div>`;
