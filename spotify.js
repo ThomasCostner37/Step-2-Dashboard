@@ -142,7 +142,7 @@ function injectSpotifyTab() {
     panel.id = 'tab-focus'; panel.className = 'tab-panel';
     panel.innerHTML = `
       <div class="focus-tab-grid">
-        <div class="sp-card" style="height:calc(100vh - 180px);min-height:620px;max-height:760px;display:flex;flex-direction:column;overflow:hidden;padding-top:22px;padding-bottom:28px;padding-left:28px;padding-right:28px">
+        <div class="sp-card" style="height:calc(100vh - 168px);min-height:620px;max-height:760px;display:flex;flex-direction:column;overflow:hidden;padding-top:22px;padding-bottom:20px;padding-left:28px;padding-right:28px">
           <div class="dash-head" style="margin-bottom:10px">
             <div class="dash-title">Now Playing</div>
           </div>
@@ -151,7 +151,7 @@ function injectSpotifyTab() {
             <button class="sp-connect-btn" onclick="spotifyLogin()" style="margin-top:.5rem">Connect Spotify</button>
           </div>
         </div>
-        <div class="pom-card" style="height:calc(100vh - 180px);min-height:620px;max-height:760px;display:flex;flex-direction:column;overflow:hidden">
+        <div class="pom-card" style="height:calc(100vh - 168px);min-height:620px;max-height:760px;display:flex;flex-direction:column;overflow:hidden">
           <div style="margin-bottom:1.1rem">
             <div class="dash-title" style="margin-bottom:.6rem">Pomodoro</div>
             <div class="pom-display" style="margin:.4rem 0 .7rem">
@@ -212,7 +212,7 @@ function syncFocusCardHeights() {
     return;
   }
 
-  var h = Math.max(620, Math.min(window.innerHeight - 180, 760));
+  var h = Math.max(620, Math.min(window.innerHeight - 168, 760));
   sp.style.height = h + 'px';
   pom.style.height = h + 'px';
 }
@@ -718,11 +718,11 @@ function renderFocusTabNowPlaying(info) {
       '<div class="sp-artist-lg" style="font-size:.72rem;line-height:1.25;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escH(info.artistName) + '</div>' +
     '</div>' +
     '<div style="margin-top:auto">' +
-      '<div class="sp-progress-wrap" onclick="spSeek(event)" title="Click to seek" style="margin-top:20px;margin-bottom:5px">' +
+      '<div class="sp-progress-wrap" onclick="spSeek(event)" title="Click to seek" style="margin-top:14px;margin-bottom:5px">' +
         '<div class="sp-progress-bar" style="width:' + pct.toFixed(2) + '%"></div>' +
       '</div>' +
-      '<div class="sp-time-row" style="margin-bottom:9px"><span>' + fmt(info.progress) + '</span><span>' + fmt(info.duration) + '</span></div>' +
-      '<div class="sp-controls" style="flex-direction:column;gap:9px;margin:0">' +
+      '<div class="sp-time-row" style="margin-bottom:6px"><span>' + fmt(info.progress) + '</span><span>' + fmt(info.duration) + '</span></div>' +
+      '<div class="sp-controls" style="flex-direction:column;gap:7px;margin:0">' +
         '<div style="display:flex;align-items:center;justify-content:center;gap:16px">' +
           '<button class="sp-ctrl-btn" onclick="spPrev()" title="Previous">\u23EE</button>' +
           '<button class="sp-ctrl-btn play" onclick="spPlayPause()" title="' + (info.isPlaying ? 'Pause' : 'Play') + '">' + (info.isPlaying ? '\u23F8' : '\u25B6') + '</button>' +
@@ -735,7 +735,7 @@ function renderFocusTabNowPlaying(info) {
           addBtn +
         '</div>' +
       '</div>' +
-      '<div id="sp-device-bar" style="display:flex;align-items:center;gap:8px;margin-top:13px">' +
+      '<div id="sp-device-bar" style="display:flex;align-items:center;gap:8px;margin-top:9px">' +
         '<button id="sp-device-btn" class="sp-text-btn" onclick="spToggleDevices()" style="font-size:.56rem;padding:3px 9px;gap:5px"><span id="sp-device-name">' + escH(deviceName.toUpperCase()) + '</span> \u25BE</button>' +
         '<input id="sp-volume" type="range" min="0" max="100" value="' + spVolume + '" oninput="spSetVolume(this.value)" style="flex:1;height:3px;accent-color:#1DB954;cursor:pointer">' +
       '</div>' +
