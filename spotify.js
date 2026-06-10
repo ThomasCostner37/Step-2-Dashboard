@@ -196,7 +196,7 @@ function syncFocusCardHeights() {
     return;
   }
 
-  var h = Math.max(620, Math.min(window.innerHeight - 220, 760));
+  var h = Math.max(620, Math.min(window.innerHeight - 180, 760));
   sp.style.height = h + 'px';
   pom.style.height = h + 'px';
 }
